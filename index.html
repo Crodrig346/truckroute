@@ -46,6 +46,10 @@
     #dirControls { padding: 8px 16px; display: flex; gap: 14px; align-items: center; border-bottom: 1px solid #eee; position: sticky; top: 0; background: #fff; }
     #dirControls button, #trips button { padding: 6px 12px; font-size: 14px; font-weight: bold; border: 0; border-radius: 6px; background: #f5a623; cursor: pointer; }
     #trips .item button { margin-left: 6px; background: #ffe9c2; font-weight: normal; }
+    #choices { display: none; background: #fff; border-bottom: 2px solid #f5a623; max-height: 32vh; overflow-y: auto; }
+    #choices .choice { padding: 8px 16px; border-bottom: 1px solid #eee; font-size: 15px; cursor: pointer; }
+    #choices .choice:hover { background: #fff3dc; }
+    #choices small { color: #666; display: block; }
     #navBar { display: none; background: #1b1200; color: #fff; padding: 10px 16px; font-size: 19px; font-weight: bold; }
     #meButton { flex: 0 0 auto; }
     #warnLine { padding: 0 16px 6px; font-size: 14px; font-weight: bold; color: #9a3412; }
@@ -87,9 +91,11 @@
     <button id="iosHintClose">Got it</button></div>
 
   <div id="panel">
-    <input id="startBox" placeholder="Start (e.g. Memphis, TN)">
+    <input id="startBox" placeholder="Start: address, business or city">
+    <button id="startSearch" title="Show matching addresses">🔍</button>
     <button id="meButton" title="Use my current location">📍</button>
-    <input id="endBox" placeholder="Destination (e.g. Nashville, TN)">
+    <input id="endBox" placeholder="Destination: address, business or city">
+    <button id="endSearch" title="Show matching addresses">🔍</button>
     <button id="goButton">Find route</button>
   </div>
   <!-- The truck and hours settings fold away so the map and stops have room. Press the bar to open them. -->
@@ -115,6 +121,7 @@
     <label>Leaving at <input id="departBox" type="datetime-local"></label>
   </div>
   </div>
+  <div id="choices"></div>
   <div id="message">Type a start and a destination, then press Find route.</div>
   <div id="fuelLine"></div>
   <div id="warnLine"></div>
@@ -157,17 +164,47 @@
     // ---------- Piece 1: turn a place name into map coordinates ----------
     // Computers navigate with numbers (latitude and longitude), not names.
     // "Geocoding" converts "Memphis, TN" into numbers. We use a free service called Nominatim.
-    async function findPlace(name) {
-      const url = 'https://nominatim.openstreetmap.org/search?format=json&limit=5&countrycodes=us,ca,mx&q='
-                  + encodeURIComponent(name);
+    // Kinds of answer that are a whole AREA (a town, a county...) rather than an exact spot (a house, a business, a road).
+    const AREA_KINDS = ['city', 'town', 'village', 'hamlet', 'suburb', 'county', 'state', 'country', 'municipality',
+                        'neighbourhood', 'region', 'postcode', 'city_district', 'borough', 'district', 'quarter', 'state_district'];
+
+    // Builds a short readable address like "Pilot Travel Center, Kenworth Boulevard, Jackson, TN".
+    function shortLabel(r) {
+      const a = r.address || {};
+      const street = [a.house_number, a.road].filter(Boolean).join(' ');
+      const town = a.city || a.town || a.village || a.hamlet || a.municipality || a.county;
+      const state = (a['ISO3166-2-lvl4'] || '').split('-')[1] || a.state;
+      const first = r.name && r.name !== a.road && r.name !== town ? r.name : '';
+      const parts = [first, street, town, state].filter(Boolean);
+      return parts.length ? parts.join(', ') : r.display_name;
+    }
+
+    // Asks Nominatim (the free address search) for up to 6 matches and tidies them up.
+    // Note: its rules say not to search on every keystroke, so we only search when you press Enter or 🔍.
+    async function searchPlaces(text) {
+      const url = 'https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=6&countrycodes=us,ca,mx&q='
+                  + encodeURIComponent(text);
       const response = await fetch(url);          // ask the service
+      if (!response.ok) throw new Error('The address search service is busy. Try again in a moment.');
       const results = await response.json();      // read its answer
-      if (results.length === 0) throw new Error('Could not find "' + name + '". Try adding the state.');
-      // The first answer is sometimes a whole county, whose "center" can be in the countryside far from a road.
-      // So we prefer an answer that is an actual city, town or village, and fall back to the first answer.
-      const towns = ['city', 'town', 'village', 'hamlet', 'suburb', 'house', 'road'];
-      const best = results.find(r => towns.includes(r.addresstype)) || results[0];
-      return { lat: Number(best.lat), lon: Number(best.lon) };
+      return results.map(r => ({
+        lat: Number(r.lat), lon: Number(r.lon), label: shortLabel(r), full: r.display_name,
+        kind: r.addresstype || r.type,
+        precise: !AREA_KINDS.includes(r.addresstype || r.type)    // true = an exact spot, false = a whole town/county
+      }));
+    }
+
+    // Used when you press "Find route" without picking from the list: take the best match automatically.
+    async function findPlace(name) {
+      const results = await searchPlaces(name);
+      if (results.length === 0) throw new Error('Could not find "' + name + '". Try adding the city and state, press 🔍 to see choices, or tap the map to drop a pin.');
+      // For something like "orange, tx" the first answer can be a whole county whose "center" is in the
+      // countryside far from any road, so for town names we prefer the actual town. For street addresses we
+      // prefer an exact spot.
+      let best = results[0];
+      if (/^\d/.test(name.trim())) best = results.find(r => r.precise) || results[0];                   // "123 Main St": an exact spot
+      else if (!results[0].precise) best = results.find(r => ['city', 'town', 'village'].includes(r.kind)) || results[0];   // "orange, tx": the town, not the county
+      return { lat: best.lat, lon: best.lon, radius: best.precise ? 100 : 500, coarse: !best.precise };
     }
 
     // ---------- Piece 2: ask for a truck route between two points ----------
@@ -179,9 +216,10 @@
 
     async function getRoute(start, end, truck) {
       const request = {
-        // "radius" lets the service look up to 500 m for the nearest road, in case the place we found
-        // is a city center that isn't exactly on a road.
-        locations: [ { lat: start.lat, lon: start.lon, radius: 500 }, { lat: end.lat, lon: end.lon, radius: 500 } ],
+        // "radius" says how far (in meters) the service may look for the nearest road. A town center might not
+        // be on any road, so it gets 500 m. An exact address or dropped pin only gets 100-150 m, so you
+        // don't get snapped onto a different road than the one you meant.
+        locations: [ { lat: start.lat, lon: start.lon, radius: start.radius || 500 }, { lat: end.lat, lon: end.lon, radius: end.radius || 500 } ],
         costing: 'truck',
         costing_options: { truck: {
           height: truck.heightFt * FEET_TO_METERS,
@@ -716,7 +754,7 @@
         go.onclick = (event) => {
           event.stopPropagation();
           endOverride = { text: f.name, lat: f.lat, lon: f.lon };
-          knownPlaces[f.name] = { lat: f.lat, lon: f.lon };
+          knownPlaces[f.name] = { lat: f.lat, lon: f.lon, radius: 100 };
           document.getElementById('endBox').value = f.name;
           say('Destination set to ' + f.name + '. Press Find route.');
         };
@@ -764,14 +802,90 @@
     const knownPlaces = {};          // "name as typed" -> {lat, lon}
     let lastSearch = null;           // the start and end of the route on screen (used by "Save trip")
     async function resolvePlace(text) {
-      return knownPlaces[text] ? { lat: knownPlaces[text].lat, lon: knownPlaces[text].lon } : await findPlace(text);
+      // You can also type exact coordinates, like  35.1521, -90.0499
+      const coords = text.match(/^\s*(-?\d{1,3}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)\s*$/);
+      if (coords) return { lat: Number(coords[1]), lon: Number(coords[2]), radius: 150 };
+      const known = knownPlaces[text];
+      if (known) return { lat: known.lat, lon: known.lon, radius: known.radius || 500 };
+      return await findPlace(text);
     }
+
+    // ---------- Exact addresses: pick from a list of matches, or drop a pin on the map ----------
+    const previewLayer = L.layerGroup().addTo(map);   // the pins that show which exact spot you chose
+    const previewMarkers = {};
+    function choosePlace(which, place) {
+      knownPlaces[place.label] = { lat: place.lat, lon: place.lon, radius: place.precise ? 100 : 500 };
+      document.getElementById(which + 'Box').value = place.label;
+      document.getElementById('choices').style.display = 'none';
+      if (previewMarkers[which]) previewLayer.removeLayer(previewMarkers[which]);
+      previewMarkers[which] = L.marker([place.lat, place.lon]).addTo(previewLayer)
+        .bindPopup((which === 'start' ? 'Start: ' : 'Destination: ') + place.label.replace(/</g, '&lt;'));
+      map.setView([place.lat, place.lon], place.precise ? 16 : 11);
+      previewMarkers[which].openPopup();
+      say((which === 'start' ? 'Start' : 'Destination') + ' set to ' + place.label + (place.precise ? '.' : ' (the middle of the town - add a street address for an exact spot).'));
+    }
+    // Press Enter or 🔍 in a box: show the matching places to choose from.
+    async function showChoices(which) {
+      const text = document.getElementById(which + 'Box').value.trim();
+      const list = document.getElementById('choices');
+      if (!text) { say('Type an address or place first, then press 🔍 or Enter.'); return; }
+      list.style.display = 'block';
+      list.innerHTML = '<div class="choice"><small>Searching...</small></div>';
+      try {
+        const results = await searchPlaces(text);
+        list.innerHTML = '';
+        if (!results.length) {
+          list.innerHTML = '<div class="choice"><small>No matches. Try adding the city and state, or tap the map to drop a pin.</small></div>';
+          return;
+        }
+        const title = document.createElement('div');
+        title.className = 'choice';
+        title.innerHTML = '<small>Tap the right one (🎯 = exact spot, 🏙️ = middle of a town):</small>';
+        list.appendChild(title);
+        for (const place of results) {
+          const row = document.createElement('div');
+          row.className = 'choice';
+          row.textContent = (place.precise ? '🎯 ' : '🏙️ ') + place.label;
+          const full = document.createElement('small');
+          full.textContent = place.full;
+          row.appendChild(full);
+          row.onclick = () => choosePlace(which, place);
+          list.appendChild(row);
+        }
+      } catch (error) {
+        list.innerHTML = '<div class="choice"><small></small></div>';
+        list.querySelector('small').textContent = error.message;
+      }
+    }
+    for (const which of ['start', 'end']) {
+      document.getElementById(which + 'Search').onclick = () => showChoices(which);
+      document.getElementById(which + 'Box').addEventListener('keydown', (event) => { if (event.key === 'Enter') showChoices(which); });
+      // Typing changes the text, so forget any exact place chosen earlier for this box.
+      document.getElementById(which + 'Box').addEventListener('input', () => {
+        if (previewMarkers[which]) { previewLayer.removeLayer(previewMarkers[which]); previewMarkers[which] = null; }
+      });
+    }
+    // Tap anywhere on the map to drop a pin: great for a dock, a yard or a spot with no address.
+    map.on('click', (event) => {
+      const { lat, lng } = event.latlng;
+      const label = 'Pin ' + lat.toFixed(5) + ', ' + lng.toFixed(5);
+      const box = document.createElement('div');
+      box.innerHTML = '<b>Dropped pin</b><br><small>' + lat.toFixed(5) + ', ' + lng.toFixed(5) + '</small><br>';
+      for (const [which, text] of [['start', '📍 Start here'], ['end', '🏁 Go here']]) {
+        const button = document.createElement('button');
+        button.textContent = text;
+        button.style.cssText = 'margin:6px 6px 0 0;padding:6px 10px;border:0;border-radius:6px;background:#f5a623;font-weight:bold;cursor:pointer';
+        button.onclick = () => { map.closePopup(); choosePlace(which, { lat, lon: lng, label, precise: true }); };
+        box.appendChild(button);
+      }
+      L.popup().setLatLng(event.latlng).setContent(box).openOn(map);
+    });
     // The 📍 button: put your current GPS position in the Start box.
     document.getElementById('meButton').onclick = () => {
       if (!navigator.geolocation) { say('This device has no GPS access.'); return; }
       say('Finding your location...');
       navigator.geolocation.getCurrentPosition(
-        p => { knownPlaces['My location'] = { lat: p.coords.latitude, lon: p.coords.longitude };
+        p => { knownPlaces['My location'] = { lat: p.coords.latitude, lon: p.coords.longitude, radius: 100 };
                document.getElementById('startBox').value = 'My location'; say('Start set to your current location.'); },
         e => say('Could not get your location: ' + e.message));
     };
@@ -875,7 +989,7 @@
       speak('You are off route. Recalculating.');
       document.getElementById('navBar').style.display = 'block';
       document.getElementById('navBar').textContent = '↻ Off route - recalculating...';
-      knownPlaces['My location'] = { lat, lon };
+      knownPlaces['My location'] = { lat, lon, radius: 100 };
       document.getElementById('startBox').value = 'My location';
       document.getElementById('goButton').click();
     }
@@ -1001,6 +1115,11 @@
         const start = await resolvePlace(startText);
         const end = await resolvePlace(endText);
         lastSearch = { startText, endText, start, end };   // remembered so you can save the trip
+        document.getElementById('choices').style.display = 'none';
+        // If you typed a street address but we could only match the town, say so (see the note after the route).
+        const looksLikeAddress = t => /^\d+\s/.test(t);
+        const coarse = [[startText, start], [endText, end]].filter(([t, p]) => looksLikeAddress(t) && p.coarse).map(([t]) => t);
+        const coarseNote = coarse.length ? ' NOTE: "' + coarse.join('" and "') + '" matched only the town center, not the exact address. Press 🔍 to pick the address, or tap the map to drop a pin.' : '';
 
         // Read the truck settings from the boxes and remember them for next time.
         const truck = {
@@ -1024,6 +1143,7 @@
 
         // Draw it
         routeStuff.clearLayers();
+        previewLayer.clearLayers(); previewMarkers.start = previewMarkers.end = null;   // the route's own Start/End pins replace the preview pins
         const line = L.polyline(path, { color: '#e07b00', weight: 6 }).addTo(routeStuff);
         L.marker([start.lat, start.lon]).addTo(routeStuff).bindPopup('Start');
         L.marker([end.lat, end.lon]).addTo(routeStuff).bindPopup('Destination');
@@ -1032,7 +1152,7 @@
         const miles = trip.summary.length.toFixed(0);
         const hours = Math.floor(trip.summary.time / 3600);
         const minutes = Math.round((trip.summary.time % 3600) / 60);
-        say(miles + ' miles - about ' + hours + ' h ' + minutes + ' min of driving.');
+        say(miles + ' miles - about ' + hours + ' h ' + minutes + ' min of driving.' + coarseNote);
 
         // Step 5a: remember the trip and work out the required breaks.
         currentTrip = { hours: trip.summary.time / 3600, miles: trip.summary.length };
