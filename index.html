@@ -161,7 +161,7 @@
     .btnRow { display: flex; gap: 8px; margin: 10px 0; }
     .btnRow button { flex: 1; height: 42px; border: 0; border-radius: 10px; background: var(--field); font-weight: 700; }
     .btnRow button#hereSave { background: var(--accent); color: var(--accent-ink); }
-    #hereStatus { margin-top: 8px; font-size: 14px; font-weight: 600; }
+    #hereStatus { margin-top: 8px; font-size: 14px; font-weight: 600; white-space: pre-wrap; overflow-wrap: anywhere; }
 
     /* Driving mode: a big, high-contrast "next turn" card, and everything else gets out of the way */
     #navBar { display: none; position: absolute; z-index: 1300; left: 10px; right: 10px; top: calc(10px + env(safe-area-inset-top));
@@ -312,6 +312,7 @@
             <div class="btnRow">
               <button id="hereSave">Save key</button>
               <button id="hereTest">Test</button>
+              <button id="hereDiag" title="Tries the stop search several ways and reports what HERE says">Diagnose</button>
               <button id="hereRemove">Remove</button>
             </div>
             <label class="check"><input type="checkbox" id="useHere" checked> Use HERE when a key is saved</label>
@@ -1716,11 +1717,19 @@
         if (error.name === 'AbortError') throw error;
         throw new Error('Could not reach HERE (no internet, or this website is not in your Trusted domains yet).');
       }
+      // HERE usually explains a problem in its reply. We pass that explanation along (it never contains the key).
+      let explanation = '';
+      if (!response.ok) {
+        try {
+          const body = await response.clone().json();
+          explanation = [body.title, body.error_description, body.detail, body.cause].filter(Boolean).join(' - ').slice(0, 220);
+        } catch (e) { /* no explanation given */ }
+      }
       if (response.status === 401 || response.status === 403) {
-        throw new Error('HERE did not accept the key (error ' + response.status + '). Check the key, and that Trusted domains lists this website. Changes there can take up to 30 minutes.');
+        throw new Error('HERE did not accept the key (error ' + response.status + '). Check the key, and that Trusted domains lists this website. Changes there can take up to 30 minutes.' + (explanation ? ' HERE says: ' + explanation : ''));
       }
       if (response.status === 429) throw new Error('HERE says there were too many requests. Try again in a moment.');
-      if (!response.ok) throw new Error('HERE returned error ' + response.status + '.');
+      if (!response.ok) throw new Error('HERE returned error ' + response.status + '.' + (explanation ? ' HERE says: ' + explanation : ''));
       return response.json();
     }
 
@@ -1854,10 +1863,45 @@
         let text = place ? '✅ Address search works (found ' + (place.address.label || 'Memphis').replace(/, United States$/, '') + '). ' : 'Address search answered but found nothing. ';
         status.textContent = text + 'Checking stops along a route...';
         const stops = await askHereSection([[35.1495, -90.049], [35.3, -89.6], [35.6145, -88.8139]]);
-        status.textContent = text + '✅ Stops along a route work (' + stops.length + ' found on a test route near Memphis).';
+        status.textContent = stops.length
+          ? text + '✅ Stops along a route work (' + stops.length + ' found on a test route near Memphis).'
+          : text + '⚠️ Stops along a route found 0 places on a test route near Memphis. Press Diagnose to see why.';
       } catch (error) {
         status.textContent = '❌ ' + error.message;
       }
+      showHereUsage();
+    };
+    // "Diagnose" tries the stop search several different ways around downtown Memphis and reports what HERE answers.
+    // It shows counts and the category ids HERE uses, never the key.
+    document.getElementById('hereDiag').onclick = async () => {
+      const status = document.getElementById('hereStatus');
+      if (!hereKey()) { status.textContent = 'Save a key first.'; return; }
+      const center = '35.1495,-90.049';
+      const strip = [[35.1495, -90.049], [35.3, -89.6], [35.6145, -88.8139]];
+      const route = encodeFlexPolyline(strip);
+      const tries = [
+        ['A. anything within 3 km of downtown Memphis', { at: center, in: 'circle:' + center + ';r=3000', limit: '5' }],
+        ['B. the 5 stop categories, within 5 km', { at: center, in: 'circle:' + center + ';r=5000', categories: HERE_CATEGORIES, limit: '5' }],
+        ['C. gas stations only (700-7600-0116), within 5 km', { at: center, in: 'circle:' + center + ';r=5000', categories: '700-7600-0116', limit: '5' }],
+        ['D. anything along a test route (strip 2.4 km)', { at: center, route: route + ';w=2400', limit: '5' }],
+        ['E. the 5 stop categories along the route', { at: center, route: route + ';w=2400', categories: HERE_CATEGORIES, limit: '5' }],
+        ['F. gas stations along the route, strip 5 km', { at: center, route: route + ';w=5000', categories: '700-7600-0116', limit: '5' }]
+      ];
+      let report = 'Diagnosing (6 requests)...';
+      status.textContent = report;
+      report = '';
+      for (const [name, params] of tries) {
+        try {
+          const data = await hereFetch('https://browse.search.hereapi.com/v1/browse', { ...params, lang: 'en-US' });
+          const items = data.items || [];
+          const sample = items.slice(0, 3).map(item => item.title + ' [' + (item.categories || []).map(c => c.id).join(' ') + ']').join('; ');
+          report += name + ': ' + items.length + ' found' + (sample ? ' - ' + sample : '') + '\n';
+        } catch (error) {
+          report += name + ': ❌ ' + error.message + '\n';
+        }
+        status.textContent = report + '...';
+      }
+      status.textContent = report.trim();
       showHereUsage();
     };
     refreshHereUi();
