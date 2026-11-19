@@ -96,7 +96,7 @@
     #fuelLine:empty, #warnLine:empty { display: none; }
 
     /* The tab bar */
-    #tabs { flex: none; display: grid; grid-template-columns: repeat(6, 1fr); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+    #tabs { flex: none; display: grid; grid-template-columns: repeat(5, 1fr); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
     #tabs button { border: 0; background: transparent; padding: 7px 2px 6px; display: flex; flex-direction: column; align-items: center; gap: 1px;
                    color: var(--muted); border-bottom: 3px solid transparent; }
     #tabs .ico { font-size: 19px; line-height: 1.1; }
@@ -105,7 +105,27 @@
 
     /* The content area under the tabs: one "pane" shows at a time */
     #panes { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
-    #plan, #favs, #dirs, #trips, #settings { display: none; }
+    #route, #favs, #trips, #settings { display: none; }
+    .paneHead { margin: 0; padding: 14px 16px 6px; font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+
+    /* The tools at the top of the Stops tab: search box and "show on map" buttons */
+    #stopTools { position: sticky; top: 0; z-index: 2; background: var(--card); padding: 10px 12px 8px; border-bottom: 1px solid var(--line); }
+    #stopSearch { width: 100%; height: 42px; border: 1px solid var(--line); background: var(--field); border-radius: 12px; padding: 0 12px; font-size: 16px; }
+    #chips { display: flex; gap: 6px; overflow-x: auto; padding: 8px 0 4px; -webkit-overflow-scrolling: touch; }
+    .chip { flex: none; white-space: nowrap; border: 1px solid var(--line); background: var(--field); border-radius: 999px; padding: 6px 12px; font-size: 13px; font-weight: 700; }
+    .chip.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+    #stops .stop.selected { box-shadow: inset 4px 0 0 var(--accent); }
+
+    /* The navigation arrow on the map (shows once a route exists, hides while driving) */
+    #navButton { display: none; position: absolute; z-index: 1250; right: 12px; bottom: calc(var(--sheet-h) + 14px); width: 66px; height: 66px;
+                 border: 0; border-radius: 50%; background: var(--accent); color: var(--accent-ink); box-shadow: var(--shadow);
+                 flex-direction: column; align-items: center; justify-content: center; padding: 0; }
+    #navButton svg { width: 30px; height: 30px; }
+    #navButton span { font-size: 11px; font-weight: 800; margin-top: -1px; }
+    #navButton:active { filter: brightness(.92); }
+    body.has-route:not(.driving) #navButton { display: flex; }
+    .check { display: flex; align-items: center; gap: 10px; font-size: 15px; }
+    .check input { width: 22px; height: 22px; }
 
     /* Rows in the lists */
     .stop, .item { padding: 12px 16px; border-bottom: 1px solid var(--line); font-size: 15px; cursor: pointer; }
@@ -122,7 +142,7 @@
     #favs button, #trips .item button { border: 0; background: var(--field); border-radius: 10px; padding: 6px 12px; margin-left: 8px; font-size: 14px; }
     #dirControls { position: sticky; top: 0; z-index: 1; display: flex; gap: 14px; align-items: center; padding: 10px 16px;
                    background: var(--card); border-bottom: 1px solid var(--line); }
-    #navButton, #trips .item:first-child button { border: 0; border-radius: 12px; background: var(--accent); color: var(--accent-ink); font-weight: 800; padding: 10px 16px; margin-left: 0; }
+    #trips .item:first-child button { border: 0; border-radius: 12px; background: var(--accent); color: var(--accent-ink); font-weight: 800; padding: 10px 16px; margin-left: 0; }
     #dirControls label { display: flex; align-items: center; gap: 6px; font-size: 14px; }
 
     /* The Truck tab (settings) */
@@ -136,6 +156,12 @@
     #truck label.check { flex-direction: row; align-items: center; gap: 10px; color: var(--text); font-size: 15px; }
     #truck label.check input { width: 22px; height: 22px; }
     #settings .themeToggle { padding: 10px 16px; font-size: 15px; }
+    #settings .hint { margin: 0 0 10px; font-size: 13px; color: var(--muted); }
+    #hereKeyBox { width: 100%; height: 44px; border: 1px solid var(--line); background: var(--field); border-radius: 10px; padding: 0 12px; font-size: 16px; }
+    .btnRow { display: flex; gap: 8px; margin: 10px 0; }
+    .btnRow button { flex: 1; height: 42px; border: 0; border-radius: 10px; background: var(--field); font-weight: 700; }
+    .btnRow button#hereSave { background: var(--accent); color: var(--accent-ink); }
+    #hereStatus { margin-top: 8px; font-size: 14px; font-weight: 600; }
 
     /* Driving mode: a big, high-contrast "next turn" card, and everything else gets out of the way */
     #navBar { display: none; position: absolute; z-index: 1300; left: 10px; right: 10px; top: calc(10px + env(safe-area-inset-top));
@@ -170,6 +196,7 @@
       #search.compact #brandRow { display: flex; }
       #navBar { left: 442px; }
       #stopFab { bottom: 16px; }
+      #navButton { bottom: 22px; right: 22px; }
       #iosHint { left: 442px; bottom: 12px; }
     }
   </style>
@@ -206,6 +233,11 @@
       <button id="iosHintClose">Got it</button></div>
     <div id="navBar"></div>
     <button id="stopFab">■ Stop driving</button>
+    <!-- The navigation arrow: appears on the map once a route is found. Tap it to start driving (GPS + voice). -->
+    <button id="navButton" title="Start navigation" aria-label="Start navigation">
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2 4.5 20.3l.7.7L12 18l6.8 3 .7-.7z"/></svg>
+      <span>GO</span>
+    </button>
 
     <!-- The slide-up panel -->
     <div id="sheet">
@@ -216,25 +248,36 @@
         <div id="warnLine"></div>
       </div>
       <nav id="tabs">
+        <button id="tabTruck"><span class="ico">🚛</span><span class="lbl">Truck</span></button>
         <button id="tabStops" class="active"><span class="ico">⛽</span><span class="lbl">Stops</span></button>
-        <button id="tabPlan"><span class="ico">🕒</span><span class="lbl">Plan</span></button>
-        <button id="tabDirs"><span class="ico">🧭</span><span class="lbl">Drive</span></button>
+        <button id="tabRoute"><span class="ico">🗺️</span><span class="lbl">Route</span></button>
         <button id="tabFavs"><span class="ico">⭐</span><span class="lbl">Favs<span id="favCount"></span></span></button>
         <button id="tabTrips"><span class="ico">💾</span><span class="lbl">Trips<span id="tripCount"></span></span></button>
-        <button id="tabTruck"><span class="ico">🚛</span><span class="lbl">Truck</span></button>
       </nav>
 
       <div id="panes">
-        <div id="stops"><div class="stop tip"><small>Stops along your route will appear here.</small></div></div>
-        <div id="plan"><div class="item"><small>Your required breaks will appear here after you find a route.</small></div></div>
-        <div id="favs"></div>
-        <div id="dirs">
-          <div id="dirControls">
-            <button id="navButton">▶ Start driving</button>
-            <label><input type="checkbox" id="voiceBox" checked> 🔊 Voice</label>
+        <div id="stops">
+          <div id="stopTools">
+            <input id="stopSearch" type="search" placeholder="Search stops by name (for example Pilot)" autocomplete="off">
+            <div id="chips">
+              <button class="chip" data-kind="fuel">⛽ Fuel</button>
+              <button class="chip" data-kind="truck">🚛 Truck stops</button>
+              <button class="chip" data-kind="rest">🅿️ Rest areas</button>
+              <button class="chip" data-kind="parking">🅿️ Truck parking</button>
+              <button class="chip" data-kind="scale">⚖️ Weigh stations</button>
+              <button class="chip" data-kind="bridge">🌉 Clearances</button>
+              <button class="chip" id="chipClear">✕ Clear map</button>
+            </div>
           </div>
-          <div id="dirList"></div>
+          <div id="stopList"><div class="stop tip"><small>Stops along your route will appear here.</small></div></div>
         </div>
+        <!-- The Route tab: your required breaks, then the turn-by-turn directions -->
+        <div id="route">
+          <div id="plan"><div class="item"><small>Your required breaks will appear here after you find a route.</small></div></div>
+          <h4 class="paneHead">Turn-by-turn directions</h4>
+          <div id="dirs"><div id="dirList"></div></div>
+        </div>
+        <div id="favs"></div>
         <div id="trips"></div>
 
         <div id="settings">
@@ -260,6 +303,24 @@
               <label>Driven since last 30-min break <input id="sinceBreakBox" type="number" step="0.25" min="0" max="8" value="0"></label>
               <label>Leaving at <input id="departBox" type="datetime-local"></label>
             </div>
+          </section>
+          <section>
+            <h3>Better data (HERE)</h3>
+            <p class="hint">Paste your HERE API key to get more complete addresses and stops. It is saved only on this device
+              and sent only to HERE. Never share it with anyone.</p>
+            <input id="hereKeyBox" type="password" placeholder="Paste your HERE API key" autocomplete="off" autocapitalize="off" spellcheck="false">
+            <div class="btnRow">
+              <button id="hereSave">Save key</button>
+              <button id="hereTest">Test</button>
+              <button id="hereRemove">Remove</button>
+            </div>
+            <label class="check"><input type="checkbox" id="useHere" checked> Use HERE when a key is saved</label>
+            <div id="hereStatus"></div>
+            <small id="hereUsage"></small>
+          </section>
+          <section>
+            <h3>Navigation</h3>
+            <label class="check"><input type="checkbox" id="voiceBox" checked> 🔊 Voice guidance while driving</label>
           </section>
           <section>
             <h3>Look</h3>
@@ -347,7 +408,11 @@
       if (bias) url += '&lat=' + bias.center.lat.toFixed(4) + '&lon=' + bias.center.lng.toFixed(4);
       const response = await fetch(url);
       if (!response.ok) throw new Error('busy');
-      return (await response.json()).features
+      return photonPlaces(await response.json());
+    }
+    // Turns Photon's raw answer into our tidy list of places.
+    function photonPlaces(data) {
+      return data.features
         .filter(f => ['US', 'CA', 'MX'].includes(f.properties.countrycode))
         .map(f => {
           const p = f.properties;
@@ -375,11 +440,14 @@
         const key = place.lat.toFixed(3) + ',' + place.lon.toFixed(3);   // within ~100 m = the same place
         if (!seen.has(key)) { seen.add(key); unique.push(place); }
       }
-      // If you typed a state ("... , AR" or "... TX"), put results in that state first.
+      return rankByTypedState(unique, query).slice(0, 8);
+    }
+    // If you typed a state ("... , AR" or "... TX"), put results in that state first.
+    function rankByTypedState(list, query) {
       const typed = (query.match(/[,\s]\s*([A-Za-z]{2})\s*$/) || [])[1];
       const wanted = typed && Object.values(STATE_CODES).includes(typed.toUpperCase()) ? typed.toUpperCase() : null;
-      if (wanted) unique.sort((x, y) => (y.label.endsWith(', ' + wanted) ? 1 : 0) - (x.label.endsWith(', ' + wanted) ? 1 : 0));
-      return unique.slice(0, 8);
+      if (wanted) list.sort((x, y) => (y.label.endsWith(', ' + wanted) ? 1 : 0) - (x.label.endsWith(', ' + wanted) ? 1 : 0));
+      return list;
     }
 
     // The map data often spells things differently than people type. "WW White Rd" is stored as "W. W. White Road",
@@ -394,6 +462,11 @@
 
     async function searchPlaces(text) {
       const query = cleanAddress(text);
+      // With a HERE key saved, try HERE first (it is more complete). If it has a problem or finds nothing, use the free services.
+      if (hereReady()) {
+        try { const fromHere = await searchHere(query); if (fromHere.length) return fromHere; }
+        catch (hereProblem) { /* fall through to the free services */ }
+      }
       let results = await searchBoth(query);
       if (!results.length) {
         const respelled = spellVariant(query);
@@ -600,9 +673,76 @@
     }
 
     const stopMarkers = L.layerGroup().addTo(map);
+    let stopsRunId = 0;     // goes up with every route search, so a slow old search can't overwrite a newer one
+
+    // ---------- Which stops get a pin on the map? Only the ones you ask for. ----------
+    // Showing every stop at once buries the route, so by default the map shows none. A stop gets a pin when:
+    //   - you tap it in the list,
+    //   - you switch on its kind with the buttons above the list (Fuel, Truck stops, ...), or
+    //   - it matches the words you typed in the search box.
+    // (A clearance too low for your truck always shows, because that's a safety warning.)
+    const visibleKinds = new Set();      // kinds switched on with the buttons
+    const selectedKeys = new Set();      // stops you tapped
+    const markerByKey = {};              // the map pin for each stop (only some are actually on the map)
+    let stopQuery = '';                  // the words typed in the search box
+    function stopMatches(s) {
+      return !stopQuery || (s.name + ' ' + NAMES[s.kind] + ' ' + (s.tags.brand || '')).toLowerCase().includes(stopQuery);
+    }
+    // Tap a stop in a list: show its pin and fly there. Tap it again: hide the pin.
+    function toggleSelectStop(s, row) {
+      const pin = markerByKey[s.key];
+      if (selectedKeys.has(s.key)) {
+        selectedKeys.delete(s.key);
+        if (row) row.classList.remove('selected');
+        const tooLow = s.kind === 'bridge' && s.clearance < Number(document.getElementById('heightBox').value) * FEET_TO_METERS;
+        const stillWanted = tooLow || visibleKinds.has(s.kind) || (stopQuery && stopMatches(s));
+        if (pin && !stillWanted) stopMarkers.removeLayer(pin);
+      } else {
+        selectedKeys.add(s.key);
+        if (row) row.classList.add('selected');
+        if (pin) {
+          stopMarkers.addLayer(pin);
+          if (window.innerWidth < 900) setSheet('peek');       // on a phone, fold the panel down so you can see the pin
+          map.setView([s.lat, s.lon], Math.max(map.getZoom(), 13));
+          pin.openPopup();
+        }
+      }
+    }
+    function refreshStops() { if (redrawStops) redrawStops(); }
+    // The "Show on map" buttons
+    document.querySelectorAll('#chips .chip[data-kind]').forEach(chip => {
+      chip.onclick = () => {
+        const kind = chip.dataset.kind;
+        if (visibleKinds.has(kind)) { visibleKinds.delete(kind); chip.classList.remove('on'); }
+        else { visibleKinds.add(kind); chip.classList.add('on'); if (window.innerWidth < 900) setSheet('peek'); }
+        refreshStops();
+      };
+    });
+    document.getElementById('chipClear').onclick = () => {
+      visibleKinds.clear(); selectedKeys.clear(); stopQuery = '';
+      document.getElementById('stopSearch').value = '';
+      document.querySelectorAll('#chips .chip.on').forEach(chip => chip.classList.remove('on'));
+      refreshStops();
+    };
+    {
+      let typing = null;
+      document.getElementById('stopSearch').addEventListener('input', (event) => {
+        clearTimeout(typing);
+        typing = setTimeout(() => { stopQuery = event.target.value.trim().toLowerCase(); refreshStops(); }, 200);
+      });
+    }
 
     async function showStops(path) {
-      const box = document.getElementById('stops');
+      const box = document.getElementById('stopList');
+      const myRun = ++stopsRunId;
+      let hereDown = false, hereMessage = '';      // set if HERE has a problem during this search
+      const hereNoteHtml = () => {
+        const row = document.createElement('div'), small = document.createElement('small');
+        row.className = 'stop';
+        small.textContent = 'HERE: ' + hereMessage + ' Used the free service instead.';
+        row.appendChild(small);
+        return row.outerHTML;
+      };
       stopMarkers.clearLayers();
       box.innerHTML = '<div class="stop"><small>Looking for fuel, truck stops and rest areas...</small></div>';
 
@@ -617,11 +757,11 @@
       for (let i = 1; i < path.length; i++) {
         current.push(path[i]);
         sectionMiles += miles(path[i - 1], path[i]);
-        if (sectionMiles >= 50) { sections.push(current); current = [path[i]]; sectionMiles = 0; }
+        if (sectionMiles >= (hereReady() ? 40 : 50)) { sections.push(current); current = [path[i]]; sectionMiles = 0; }   // HERE answers at most 100 places per request
       }
       if (current.length > 1) sections.push(current);
 
-      await pickFastestServer();
+      if (!hereReady()) await pickFastestServer();
       const found = [], seen = new Set();
       let finished = 0, failed = 0, nextSection = 0;
       async function worker() {
@@ -640,17 +780,36 @@
                         ';nwr[amenity=parking]["capacity:hgv"]' + near +
                         // anything with a posted height limit (we check the height ourselves, in draw())
                         ';nwr[maxheight]' + near + ';nwr["maxheight:physical"]' + near + ';);out center tags 500;';
-          try {
-            for (const item of await askOverpass(query)) {
+          const clearanceQuery = '[out:json][timeout:60];(nwr[maxheight]' + near + ';nwr["maxheight:physical"]' + near + ';);out center tags 300;';
+          if (myRun !== stopsRunId) return;         // a newer route search has started: stop working for the old one
+          const addElements = (items) => {
+            for (const item of items) {
               const id = item.type + item.id;
               if (!seen.has(id)) { seen.add(id); found.push(item); }   // skip duplicates where sections overlap
             }
+          };
+          try {
+            let usedHere = false;
+            if (hereReady() && !hereDown) {
+              try { addElements(await askHereSection(section)); usedHere = true; }
+              catch (hereProblem) { hereDown = true; hereMessage = hereProblem.message; }   // from now on, use the free service
+            }
+            if (!usedHere) addElements(await askOverpass(query));
+            else {
+              // HERE has no posted-height data, so low clearances still come from the free map data, in the background.
+              askOverpass(clearanceQuery).then(items => {
+                if (myRun !== stopsRunId) return;
+                addElements(items); draw(finished >= sections.length);
+              }).catch(() => { /* optional extra: fine if the free service is busy */ });
+            }
           } catch (e) { failed++; }
           finished++;
+          if (myRun !== stopsRunId) return;
           draw(false);   // show what we have so far
         }
       }
       await Promise.all([worker(), worker()]);
+      if (myRun !== stopsRunId) return;
       if (failed === sections.length) {
         throw new Error('The free stop-data service is busy right now. Your route is fine - try again in a few minutes.');
       }
@@ -664,8 +823,8 @@
       function draw(isFinal) {
       stopMarkers.clearLayers();
       const progress = isFinal ? '' : '<div class="stop"><small>Still searching: ' + finished + ' of ' + sections.length + ' sections done...</small></div>';
-      const note = failed ? '<div class="stop"><small>Note: ' + failed + ' of ' + sections.length +
-                            ' sections could not be searched (service busy), so some stops may be missing.</small></div>' : '';
+      const note = (hereDown ? hereNoteHtml() : '') + (failed ? '<div class="stop"><small>Note: ' + failed + ' of ' + sections.length +
+                            ' sections could not be searched (service busy), so some stops may be missing.</small></div>' : '');
       const stops = [];
       const truckHeightM = Number(document.getElementById('heightBox').value) * FEET_TO_METERS;
       for (const item of found) {
@@ -709,7 +868,7 @@
 
       if (stops.length === 0) { box.innerHTML = (isFinal ? '<div class="stop"><small>No stops found near this route.</small></div>' : progress) + note; return; }
       box.innerHTML = progress + note +
-        '<div class="stop tip"><small>Tip: tap the ☆ on the right of a stop to save it to ⭐ Favorites, or 💲 to enter its diesel price.</small></div>';
+        '<div class="stop tip"><small>Tap a stop to show it on the map, or use the buttons above to show a whole kind. ☆ saves it to Favs, 💲 enters its diesel price.</small></div>';
 
       // Which stop has the lowest diesel price that someone has reported?
       const cheapestKey = cheapestStopKey(stops);
@@ -717,14 +876,29 @@
       const shown = document.getElementById('sortBox').value === 'price'
         ? stops.filter(s => s.kind === 'fuel' || s.kind === 'truck').sort((a, b) => (prices[a.key] ? prices[a.key].p : 99) - (prices[b.key] ? prices[b.key].p : 99))
         : stops;
-      for (const s of shown) {
+      // 1) The map: make a pin for every stop, but put only the wanted ones on the map.
+      for (const s of stops) {
+        const lowForYou = s.kind === 'bridge' && s.clearance < truckHeightM;
+        const pin = L.marker([s.lat, s.lon], {
+          icon: L.divIcon({ className: '', html: '<div class="pin">' + (lowForYou ? '⛔' : ICONS[s.kind]) + '</div>', iconSize: [26, 26] })
+        }).bindPopup('<b>' + s.name.replace(/</g, '&lt;') + '</b><br>' + NAMES[s.kind] +
+                     (s.kind === 'bridge' ? '<br>Posted clearance ' + fmtFt(s.clearance) : ''));
+        markerByKey[s.key] = pin;
+        if (lowForYou || selectedKeys.has(s.key) || visibleKinds.has(s.kind) || (stopQuery && stopMatches(s))) pin.addTo(stopMarkers);
+      }
+
+      // 2) The list: everything found, narrowed by your search words if you typed any.
+      const listed = shown.filter(stopMatches);
+      if (!listed.length) {
+        const none = document.createElement('div');
+        none.className = 'stop';
+        none.innerHTML = '<small></small>';
+        none.querySelector('small').textContent = 'No stops match "' + stopQuery + '".';
+        box.appendChild(none);
+      }
+      for (const s of listed) {
         const tooLowForYou = s.kind === 'bridge' && s.clearance < truckHeightM;
         const icon = tooLowForYou ? '⛔' : ICONS[s.kind];
-        const marker = L.marker([s.lat, s.lon], {
-          icon: L.divIcon({ className: '', html: '<div class="pin">' + icon + '</div>', iconSize: [26, 26] })
-        }).addTo(stopMarkers).bindPopup('<b>' + s.name.replace(/</g, '&lt;') + '</b><br>' + NAMES[s.kind] +
-                                        (s.kind === 'bridge' ? '<br>Posted clearance ' + fmtFt(s.clearance) : ''));
-
         const row = document.createElement('div');
         row.className = 'stop';
         row.textContent = icon + ' ' + s.name + '  - ' + NAMES[s.kind];
@@ -738,7 +912,8 @@
         row.appendChild(detail);
         if (s.kind !== 'bridge') row.prepend(starButton(s));   // the ☆ / ⭐ button on the right of each row
         if (s.kind === 'fuel' || s.kind === 'truck') row.prepend(priceButton(s));   // the 💲 button
-        row.onclick = () => { map.setView([s.lat, s.lon], 14); marker.openPopup(); };  // click a row to jump to it
+        if (selectedKeys.has(s.key)) row.classList.add('selected');
+        row.onclick = () => toggleSelectStop(s, row);   // tap a row: show its pin on the map (tap again to hide it)
         box.appendChild(row);
       }
       }   // end of draw()
@@ -837,7 +1012,7 @@
         else suggestion.textContent = currentStops.length ? 'No truck stop or rest area found before this point - plan ahead!' : 'Stops are still loading...';
         row.appendChild(suggestion);
         row.style.cursor = stop ? 'pointer' : 'default';
-        if (stop) row.onclick = () => map.setView([stop.lat, stop.lon], 13);
+        if (stop) row.onclick = () => { if (selectedKeys.has(stop.key)) map.setView([stop.lat, stop.lon], 14); else toggleSelectStop(stop, null); };
         box.appendChild(row);
       }
     }
@@ -986,7 +1161,7 @@
 
     // Switch between the six tabs at the bottom (Stops, Plan, Drive, Favs, Trips, Truck).
     function showTab(which) {
-      for (const [name, tabId] of [['stops', 'tabStops'], ['plan', 'tabPlan'], ['dirs', 'tabDirs'], ['favs', 'tabFavs'], ['trips', 'tabTrips'], ['settings', 'tabTruck']]) {
+      for (const [name, tabId] of [['settings', 'tabTruck'], ['stops', 'tabStops'], ['route', 'tabRoute'], ['favs', 'tabFavs'], ['trips', 'tabTrips']]) {
         document.getElementById(name).style.display = which === name ? 'block' : 'none';
         document.getElementById(tabId).className = which === name ? 'active' : '';
       }
@@ -994,8 +1169,7 @@
       if (getSheet() === 'peek') setSheet('half');    // pressing a tab opens the panel if it was folded down
     }
     document.getElementById('tabStops').onclick = () => showTab('stops');
-    document.getElementById('tabPlan').onclick = () => showTab('plan');
-    document.getElementById('tabDirs').onclick = () => showTab('dirs');
+    document.getElementById('tabRoute').onclick = () => showTab('route');
     document.getElementById('tabFavs').onclick = () => showTab('favs');
     document.getElementById('tabTrips').onclick = () => showTab('trips');
     document.getElementById('tabTruck').onclick = () => showTab('settings');
@@ -1033,6 +1207,7 @@
       const text = document.getElementById(which + 'Box').value.trim();
       const list = document.getElementById('choices');
       if (!text) { say('Type an address or place first, then press 🔍 or Enter.'); return; }
+      list.dataset.source = '';
       list.style.display = 'block';
       list.innerHTML = '<div class="choice"><small>Searching...</small></div>';
       try {
@@ -1087,7 +1262,67 @@
       // Typing changes the text, so forget any exact place chosen earlier for this box.
       document.getElementById(which + 'Box').addEventListener('input', () => {
         if (previewMarkers[which]) { previewLayer.removeLayer(previewMarkers[which]); previewMarkers[which] = null; }
+        suggestSoon(which);
       });
+    }
+
+    // ---------- Suggestions while you type ----------
+    // After you pause for a moment, we ask Photon for a few matches and show them under the boxes, so you can
+    // tap one instead of typing the whole address. (Photon is built for this. Nominatim's rules forbid it, so
+    // the fuller 🔍 / Enter search still uses both services.)
+    let suggestTimer = null, suggestSeq = 0, suggestAbort = null;
+    function suggestSoon(which) {
+      clearTimeout(suggestTimer);
+      const text = document.getElementById(which + 'Box').value.trim();
+      if (text.length < 3 || knownPlaces[text]) { hideSuggestions(); return; }
+      suggestTimer = setTimeout(() => showSuggestions(which, text), 350);    // wait for a pause in typing
+    }
+    function hideSuggestions() {
+      const list = document.getElementById('choices');
+      if (list.dataset.source === 'suggest') { list.style.display = 'none'; list.dataset.source = ''; }
+    }
+    async function showSuggestions(which, text) {
+      const mine = ++suggestSeq;                       // so a slow old answer can't overwrite a newer one
+      if (suggestAbort) suggestAbort.abort();
+      suggestAbort = new AbortController();
+      try {
+        const query = cleanAddress(text), bias = mapBias();
+        let places = null;
+        if (hereReady()) {
+          try { places = await suggestHere(query, bias, suggestAbort.signal); }
+          catch (hereProblem) { if (hereProblem.name === 'AbortError') return; places = null; }   // fall back to the free service below
+        }
+        if (!places) {
+          let url = 'https://photon.komoot.io/api/?limit=5&lang=en&q=' + encodeURIComponent(query);
+          if (bias) url += '&lat=' + bias.center.lat.toFixed(4) + '&lon=' + bias.center.lng.toFixed(4);
+          const response = await fetch(url, { signal: suggestAbort.signal });
+          if (!response.ok || mine !== suggestSeq) return;
+          places = rankByTypedState(photonPlaces(await response.json()), query);
+        }
+        if (mine !== suggestSeq || document.getElementById(which + 'Box').value.trim() !== text) return;
+        const list = document.getElementById('choices');
+        if (!places.length) { hideSuggestions(); return; }
+        list.innerHTML = '';
+        list.dataset.source = 'suggest';
+        list.style.display = 'block';
+        for (const place of places) {
+          const row = document.createElement('div');
+          row.className = 'choice';
+          row.textContent = (place.precise ? '🎯 ' : '🏙️ ') + place.label;
+          const full = document.createElement('small');
+          full.textContent = place.full;
+          row.appendChild(full);
+          row.onclick = () => { list.dataset.source = ''; choosePlace(which, place); };
+          list.appendChild(row);
+        }
+        const more = document.createElement('div');
+        more.className = 'choice';
+        const number = (text.match(/^\s*(\d+)/) || [])[1];
+        // If you typed a house number, the quick suggestions often only know the street, so point to the exact-address search.
+        more.innerHTML = number ? '<b>🔍 Need the exact house ' + number + '? Tap to search addresses</b>' : '<small>🔍 Not here? Tap for more matches (searches two services)</small>';
+        more.onclick = () => { list.dataset.source = ''; showChoices(which); };
+        list.appendChild(more);
+      } catch (error) { /* a cancelled or failed suggestion is fine: the 🔍 search still works */ }
     }
     // Tap anywhere on the map to drop a pin: great for a dock, a yard or a spot with no address.
     map.on('click', (event) => {
@@ -1226,7 +1461,6 @@
       nav.active = true; nav.index = 0; nav.spoken = {};
       document.body.classList.add('driving');   // driving mode: big next-turn card, search card hidden
       setSheet('peek');
-      document.getElementById('navButton').textContent = '■ Stop driving';
       document.getElementById('navBar').style.display = 'block';
       document.getElementById('navBar').textContent = 'Waiting for GPS...';
       speak('Starting navigation.');
@@ -1244,7 +1478,6 @@
       try { if (nav.wakeLock) nav.wakeLock.release(); } catch (e) { }
       nav.wakeLock = null;
       try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch (e) { }
-      document.getElementById('navButton').textContent = '▶ Start driving';
       document.getElementById('navBar').style.display = 'none';
       if (youMarker) { map.removeLayer(youMarker); youMarker = null; }
     }
@@ -1378,6 +1611,7 @@
         L.marker([end.lat, end.lon]).addTo(routeStuff).bindPopup('Destination');
         // Fold the search card down and show the results panel, then fit the route into the part of the map that is still visible.
         document.getElementById('search').classList.add('compact');
+        document.body.classList.add('has-route');     // shows the navigation arrow on the map
         if (getSheet() === 'peek' && !nav.active) setSheet('half');
         const onPhone = window.innerWidth < 900;
         map.fitBounds(line.getBounds(), {
@@ -1393,6 +1627,8 @@
         // Step 5a: remember the trip and work out the required breaks.
         currentTrip = { hours: trip.summary.time / 3600, miles: trip.summary.length };
         currentStops = [];
+        selectedKeys.clear();                                  // a new route starts with a clean map
+        for (const key in markerByKey) delete markerByKey[key];
         renderPlan();
         updateFuelLine();
         document.getElementById('warnLine').textContent = '';   // clear last route's clearance warning
@@ -1400,8 +1636,8 @@
         // Step 4: now look for stops. If this fails, the route above stays on the map.
         try { await showStops(path); }
         catch (stopError) {
-          document.getElementById('stops').innerHTML = '<div class="stop"><small></small></div>';
-          document.querySelector('#stops small').textContent = stopError.message;
+          document.getElementById('stopList').innerHTML = '<div class="stop"><small></small></div>';
+          document.querySelector('#stopList small').textContent = stopError.message;
         }
       } catch (error) {
         nav.rerouting = false;
@@ -1440,6 +1676,191 @@
       document.getElementById('iosHint').style.display = 'none';
       try { localStorage.setItem('iosHintDismissed', '1'); } catch (e) { }
     };
+
+    // ---------- STEP 9: HERE (paid map data) ----------
+    // HERE is used only when you save a key on THIS device (Truck tab). The key lives in this browser's own storage:
+    // it is never in the app's files, never on GitHub, and only ever sent to HERE. Without a key, or if HERE has a
+    // problem, the app uses the free services exactly as before.
+    const HERE_FREE_PER_MONTH = 5000;
+    function hereKey() { try { return localStorage.getItem('hereKey') || ''; } catch (e) { return ''; } }
+    function hereOn() { try { return localStorage.getItem('useHere') !== '0'; } catch (e) { return true; } }
+    function hereReady() { return !!hereKey() && hereOn(); }
+
+    // Count this device's HERE requests per month, so you can watch the free allowance (5,000 for search and truck routing).
+    function hereMonthUsage() {
+      try {
+        const month = new Date().toISOString().slice(0, 7);
+        const saved = JSON.parse(localStorage.getItem('hereUsage') || '{}');
+        return saved.month === month ? saved : { month, n: 0 };
+      } catch (e) { return { month: '', n: 0 }; }
+    }
+    function hereBump() {
+      const usage = hereMonthUsage(); usage.n++;
+      try { localStorage.setItem('hereUsage', JSON.stringify(usage)); } catch (e) { }
+      showHereUsage();
+    }
+    function showHereUsage() {
+      document.getElementById('hereUsage').textContent = 'HERE requests from this device this month: ' + hereMonthUsage().n +
+        ' (HERE gives ' + HERE_FREE_PER_MONTH.toLocaleString() + ' free per month for search and truck routing; other devices count separately).';
+    }
+
+    // One function sends every request to HERE, so errors are handled in one place. Error messages never include the key.
+    async function hereFetch(base, params, signal) {
+      const key = hereKey();
+      if (!key) throw new Error('No HERE key is saved on this device.');
+      const url = base + '?' + new URLSearchParams({ ...params, apiKey: key }).toString();
+      hereBump();
+      let response;
+      try { response = await fetch(url, { signal }); }
+      catch (error) {
+        if (error.name === 'AbortError') throw error;
+        throw new Error('Could not reach HERE (no internet, or this website is not in your Trusted domains yet).');
+      }
+      if (response.status === 401 || response.status === 403) {
+        throw new Error('HERE did not accept the key (error ' + response.status + '). Check the key, and that Trusted domains lists this website. Changes there can take up to 30 minutes.');
+      }
+      if (response.status === 429) throw new Error('HERE says there were too many requests. Try again in a moment.');
+      if (!response.ok) throw new Error('HERE returned error ' + response.status + '.');
+      return response.json();
+    }
+
+    // ----- Address search and suggestions -----
+    function hereAt(bias) {
+      const center = bias ? bias.center : map.getCenter();
+      return center.lat.toFixed(5) + ',' + center.lng.toFixed(5);
+    }
+    // Turns HERE's answer into our list of places.
+    function herePlaces(items) {
+      return items.filter(item => item.position).map(item => {
+        const a = item.address || {};
+        const street = [a.houseNumber, a.street].filter(Boolean).join(' ');
+        const town = a.city || a.district || a.county;
+        const state = a.stateCode;
+        let label;
+        if (item.resultType === 'place') label = [item.title, street, town, state].filter(Boolean).join(', ');
+        else if (['houseNumber', 'street', 'intersection', 'addressBlock'].includes(item.resultType)) label = [street || item.title, town, state].filter(Boolean).join(', ');
+        else label = [item.title, state].filter(Boolean).join(', ');
+        return {
+          lat: item.position.lat, lon: item.position.lng, label: label || item.title,
+          full: (a.label || item.title || '').replace(/, United States$/, ''),
+          kind: item.resultType,
+          precise: !['locality', 'administrativeArea', 'postalCodePoint', 'country'].includes(item.resultType)
+        };
+      });
+    }
+    // As-you-type suggestions (HERE "Autosuggest").
+    async function suggestHere(query, bias, signal) {
+      const data = await hereFetch('https://autosuggest.search.hereapi.com/v1/autosuggest',
+        { q: query, at: hereAt(bias), in: 'countryCode:USA,CAN,MEX', limit: '6', lang: 'en-US' }, signal);
+      return rankByTypedState(herePlaces(data.items || []), query);
+    }
+    // The fuller search behind the 🔍 button and Enter (HERE "Discover": addresses and businesses).
+    async function searchHere(query) {
+      const data = await hereFetch('https://discover.search.hereapi.com/v1/discover',
+        { q: query, at: hereAt(mapBias()), in: 'countryCode:USA,CAN,MEX', limit: '8', lang: 'en-US' });
+      return rankByTypedState(herePlaces(data.items || []), query);
+    }
+
+    // ----- Stops along the route -----
+    // HERE wants the route squeezed into its own "flexible polyline" text format. This encoder was checked
+    // against the example in HERE's documentation (it reproduces it exactly).
+    const FLEX_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+    function encodeFlexPolyline(points, precision = 5) {
+      const factor = 10 ** precision;
+      let out = '';
+      const varint = (value) => {
+        let v = value;
+        while (v > 0x1f) { out += FLEX_ALPHABET[(v & 0x1f) | 0x20]; v = Math.floor(v / 32); }
+        out += FLEX_ALPHABET[v];
+      };
+      const signed = (delta) => varint(delta < 0 ? ~(delta * 2) : delta * 2);
+      varint(1); varint(precision);                  // format version, then precision
+      let lastLat = 0, lastLon = 0;
+      for (const [lat, lon] of points) {
+        const la = Math.round(lat * factor), lo = Math.round(lon * factor);
+        signed(la - lastLat); signed(lo - lastLon);
+        lastLat = la; lastLon = lo;
+      }
+      return out;
+    }
+    // HERE "Place categories": 700-7600 fuel stations, 700-7900-0132 truck stops, 700-7900-0131 truck parking,
+    // 400-4300 rest areas, 400-4200-0048 weigh stations.
+    const HERE_CATEGORIES = '700-7600-0000,700-7900-0132,700-7900-0131,400-4300-0000,400-4200-0048';
+
+    // Searches a strip of about 1.5 miles either side of one section of your route. Returns the places shaped like the
+    // free map data's entries, so the rest of the app (pins, lists, favorites, prices, hours plan) works unchanged.
+    async function askHereSection(section) {
+      const line = simplify(section, 300);
+      const middle = line[Math.floor(line.length / 2)];
+      const data = await hereFetch('https://browse.search.hereapi.com/v1/browse', {
+        at: middle[0].toFixed(5) + ',' + middle[1].toFixed(5),
+        route: encodeFlexPolyline(line) + ';w=2400',
+        categories: HERE_CATEGORIES, limit: '100', lang: 'en-US'
+      });
+      return (data.items || []).map(hereToElement).filter(Boolean);
+    }
+    function hereToElement(item) {
+      if (!item.position) return null;
+      const categories = item.categories || [];
+      const ids = categories.map(c => c.id || '');
+      const names = categories.map(c => (c.name || '').toLowerCase());
+      if (names.some(n => n.includes('ev charging'))) return null;          // electric charging isn't diesel
+      const tags = { name: item.title };
+      const chain = item.chains && item.chains[0] && item.chains[0].name;
+      if (chain) tags.brand = chain;
+      if (ids.includes('400-4200-0048')) tags.amenity = 'weighbridge';
+      else if (ids.includes('700-7900-0131')) { tags.amenity = 'parking'; tags.hgv = 'designated'; }
+      else if (ids.some(id => id.startsWith('400-4300'))) tags.highway = 'rest_area';
+      else if (ids.includes('700-7900-0132')) { tags.amenity = 'fuel'; tags.hgv = 'yes'; }
+      else if (ids.some(id => id.startsWith('700-7600'))) tags.amenity = 'fuel';
+      else return null;
+      const hours = item.openingHours && item.openingHours[0];
+      if (hours && hours.text && /24/.test(hours.text.join(' ')) && /00:00\s*-\s*24:00/.test(hours.text.join(' '))) tags.opening_hours = '24/7';
+      return { type: 'here', id: item.id, lat: item.position.lat, lon: item.position.lng, tags };
+    }
+
+    // ----- The Truck tab controls -----
+    function refreshHereUi() {
+      document.getElementById('useHere').checked = hereOn();
+      document.getElementById('hereStatus').textContent = hereKey()
+        ? (hereOn() ? '✅ A key is saved on this device. HERE is on.' : 'A key is saved, but HERE is switched off.')
+        : 'No key saved. The free services are being used.';
+      showHereUsage();
+    }
+    document.getElementById('hereSave').onclick = () => {
+      const box = document.getElementById('hereKeyBox'), value = box.value.trim();
+      if (value.length < 20 || /\s/.test(value)) { document.getElementById('hereStatus').textContent = 'That does not look like a HERE key (it is a long code with no spaces). Copy it again.'; return; }
+      try { localStorage.setItem('hereKey', value); } catch (e) { document.getElementById('hereStatus').textContent = 'This browser would not let the app save the key.'; return; }
+      box.value = '';                                   // the key is not left sitting in the box
+      refreshHereUi();
+    };
+    document.getElementById('hereRemove').onclick = () => {
+      try { localStorage.removeItem('hereKey'); } catch (e) { }
+      document.getElementById('hereKeyBox').value = '';
+      refreshHereUi();
+    };
+    document.getElementById('useHere').onchange = (event) => {
+      try { localStorage.setItem('useHere', event.target.checked ? '1' : '0'); } catch (e) { }
+      refreshHereUi();
+    };
+    // "Test" checks the two things the app uses: address search, and searching along a route.
+    document.getElementById('hereTest').onclick = async () => {
+      const status = document.getElementById('hereStatus');
+      if (!hereKey()) { status.textContent = 'Save a key first.'; return; }
+      status.textContent = 'Testing...';
+      try {
+        const geo = await hereFetch('https://geocode.search.hereapi.com/v1/geocode', { q: 'Memphis, TN', in: 'countryCode:USA', limit: '1' });
+        const place = geo.items && geo.items[0];
+        let text = place ? '✅ Address search works (found ' + (place.address.label || 'Memphis').replace(/, United States$/, '') + '). ' : 'Address search answered but found nothing. ';
+        status.textContent = text + 'Checking stops along a route...';
+        const stops = await askHereSection([[35.1495, -90.049], [35.3, -89.6], [35.6145, -88.8139]]);
+        status.textContent = text + '✅ Stops along a route work (' + stops.length + ' found on a test route near Memphis).';
+      } catch (error) {
+        status.textContent = '❌ ' + error.message;
+      }
+      showHereUsage();
+    };
+    refreshHereUi();
 
     // ---------- STEP 8: the new look ----------
     // The bottom panel ("sheet") has three heights: peek (just the summary and tabs), half, and full.
