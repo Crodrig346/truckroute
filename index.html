@@ -1,6 +1,6 @@
 <!doctype html>
-<!-- TruckRoute - Step 2: type a start and destination, get a truck route -->
-<html lang="en">
+<!-- TruckRoute - map-first layout: search card on top, a slide-up panel at the bottom, dark mode -->
+<html lang="en" data-theme="light">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -15,137 +15,265 @@
   <title>TruckRoute</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 
+  <!-- Runs first, before anything is drawn, so a dark-mode phone never flashes white. -->
+  <script>
+    (function () {
+      var theme = 'light';
+      try {
+        theme = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      } catch (e) { }
+      document.documentElement.setAttribute('data-theme', theme);
+    })();
+  </script>
+
   <style>
-    /* The page is a tall column: header, panels, then the map fills whatever space is left. */
-    body { margin: 0; font-family: system-ui, sans-serif; display: flex; flex-direction: column; height: 100vh; }
-    /* env(safe-area-inset-top) keeps the header clear of the notch on newer iPhones when installed */
-    header { background: #f5a623; color: #1b1200; padding: calc(12px + env(safe-area-inset-top)) 16px 12px; font-size: 20px; font-weight: bold;
-             display: flex; justify-content: space-between; align-items: center; }
-    #installButton { font-size: 14px; font-weight: bold; padding: 6px 12px; border: 2px solid #1b1200; border-radius: 8px; background: #fff3dc; cursor: pointer; }
-    #iosHint { display: none; background: #1b1200; color: #fff; padding: 10px 16px; font-size: 14px; }
-    #iosHint button { margin-left: 10px; padding: 3px 10px; border: 0; border-radius: 6px; cursor: pointer; }
-    /* The control panel above the map */
-    #panel { padding: 10px 16px; background: #fff3dc; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-    #panel input { flex: 1 1 200px; padding: 10px; font-size: 16px; border: 1px solid #ccc; border-radius: 6px; }
-    #panel button { padding: 10px 18px; font-size: 16px; font-weight: bold; background: #f5a623; border: 0; border-radius: 6px; cursor: pointer; }
-    #message { padding: 6px 16px; min-height: 20px; font-size: 15px; }
-    #map { flex: 1; min-height: 200px; }
-    /* The list of stops under the map */
-    #stops { max-height: 170px; overflow-y: auto; background: #fff; border-top: 2px solid #f5a623; }
-    #stops .stop { padding: 8px 16px; border-bottom: 1px solid #eee; cursor: pointer; font-size: 15px; }
-    #stops .stop:hover { background: #fff3dc; }
-    #stops small { color: #666; display: block; }
-    #stops .stop.cheap { background: #e8fff1; }
-    #stops .stop.danger { background: #ffe3e3; }
-    #tabs { flex-wrap: wrap; }
-    #tabs button { flex: 1 1 auto; font-size: 14px; }
-    #dirs, #trips { display: none; overflow-y: auto; background: #fff; max-height: 35vh; min-height: 90px; }
-    #dirs .item, #trips .item { padding: 8px 16px; border-bottom: 1px solid #eee; font-size: 15px; cursor: pointer; }
-    #dirs .item.now { background: #fff3dc; font-weight: bold; }
-    #dirs small, #trips small { color: #666; display: block; }
-    #dirControls { padding: 8px 16px; display: flex; gap: 14px; align-items: center; border-bottom: 1px solid #eee; position: sticky; top: 0; background: #fff; }
-    #dirControls button, #trips button { padding: 6px 12px; font-size: 14px; font-weight: bold; border: 0; border-radius: 6px; background: #f5a623; cursor: pointer; }
-    #trips .item button { margin-left: 6px; background: #ffe9c2; font-weight: normal; }
-    #choices { display: none; background: #fff; border-bottom: 2px solid #f5a623; max-height: 32vh; overflow-y: auto; }
-    #choices .choice { padding: 8px 16px; border-bottom: 1px solid #eee; font-size: 15px; cursor: pointer; }
-    #choices .choice:hover { background: #fff3dc; }
-    #choices small { color: #666; display: block; }
-    #navBar { display: none; background: #1b1200; color: #fff; padding: 10px 16px; font-size: 19px; font-weight: bold; }
-    #meButton { flex: 0 0 auto; }
-    #warnLine { padding: 0 16px 6px; font-size: 14px; font-weight: bold; color: #9a3412; }
-    #settingsBar { background: #ffe9c2; }
-    #settingsBar button { width: 100%; text-align: left; padding: 8px 16px; font-size: 14px; font-weight: bold; border: 0; background: transparent; cursor: pointer; }
-    #stops, #plan, #favs { max-height: 35vh; min-height: 90px; }
-    #stops .tip { background: #fffbe6; }
-    #stops button.price { float: right; border: 0; background: #ffe9c2; border-radius: 6px; padding: 3px 9px; margin-left: 6px; cursor: pointer; font-size: 14px; }
-    #truck select { padding: 6px; font-size: 14px; border: 1px solid #ccc; border-radius: 6px; }
-    #fuelLine { padding: 0 16px 6px; font-size: 14px; color: #444; }
+    /* ---------- Colors. Everything below uses these names, so light and dark mode only change them here. ---------- */
+    :root {
+      --accent: #f5a623;  --accent-ink: #1b1200;
+      --bg: #eef0f3;  --card: #ffffff;  --text: #14181f;  --muted: #5d6675;  --line: #e3e6ea;  --field: #f1f3f5;
+      --good-bg: #e7f8ee;  --bad-bg: #fde8e8;  --tip-bg: #fff8e1;  --warn: #b45309;
+      --shadow: 0 6px 24px rgba(15, 23, 42, .18);
+      --sheet-peek: 176px;  --sheet-half: 52vh;  --sheet-full: 92vh;
+    }
+    [data-theme="dark"] {
+      --bg: #0e1116;  --card: #181d25;  --text: #e9edf3;  --muted: #9aa4b2;  --line: #2a313c;  --field: #222934;
+      --good-bg: #12301f;  --bad-bg: #3a1717;  --tip-bg: #2b2412;  --warn: #fbbf24;
+      --shadow: 0 6px 24px rgba(0, 0, 0, .55);
+    }
+    /* The map pictures are light; this flips them to a dark version in dark mode. */
+    [data-theme="dark"] .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(.92) contrast(.88); }
+    [data-theme="dark"] .leaflet-container { background: #14181f; }
+
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body { font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text);
+           overflow: hidden; -webkit-tap-highlight-color: transparent; }
+    button { font: inherit; color: inherit; cursor: pointer; }
+    input, select { font: inherit; color: var(--text); }
+    small { color: var(--muted); display: block; font-size: 13px; margin-top: 2px; }
+
+    /* ---------- The layout: the map fills the screen, other things float on top of it ---------- */
+    #app { position: fixed; inset: 0; }
+    #map { position: absolute; inset: 0; z-index: 0; }
+
+    /* The search card at the top */
+    #search { position: absolute; z-index: 1200; left: 10px; right: 10px; top: calc(10px + env(safe-area-inset-top));
+              background: var(--card); border-radius: 18px; box-shadow: var(--shadow); padding: 10px 12px 12px; }
+    #brandRow { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+    #brand { font-weight: 800; font-size: 18px; letter-spacing: -.2px; }
+    #brand b { color: var(--accent); }
+    #brandButtons { display: flex; gap: 6px; }
+    #installButton, .themeToggle { border: 0; border-radius: 999px; padding: 6px 12px; font-size: 14px; font-weight: 700; background: var(--field); }
+    #installButton { background: var(--accent); color: var(--accent-ink); }
+    .field { display: flex; align-items: center; gap: 6px; background: var(--field); border-radius: 12px; padding: 0 4px 0 12px; margin-bottom: 8px; height: 46px; }
+    .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+    .dotStart { border: 3px solid #3b82f6; background: var(--card); }
+    .dotEnd { background: #ef4444; }
+    .field input { flex: 1; min-width: 0; border: 0; background: transparent; height: 100%; font-size: 16px; outline: 0; }
+    .iconBtn { border: 0; background: transparent; width: 40px; height: 38px; border-radius: 10px; font-size: 18px; flex: none; }
+    .iconBtn:active { background: var(--line); }
+    #goButton { width: 100%; height: 46px; border: 0; border-radius: 12px; background: var(--accent); color: var(--accent-ink); font-weight: 800; font-size: 17px; }
+    #goButton:active { filter: brightness(.95); }
+    #search.compact #brandRow { display: none; }      /* after a route is found the card shrinks to free up the map */
+
+    /* The list of address matches drops down inside the search card */
+    #choices { display: none; margin: 8px -12px -12px; border-top: 1px solid var(--line); max-height: 38vh; overflow-y: auto; border-radius: 0 0 18px 18px; }
+    .choice { padding: 12px 16px; border-bottom: 1px solid var(--line); font-size: 15px; cursor: pointer; }
+
+    /* The slide-up panel at the bottom ("sheet"). Tap or drag its handle to make it taller or shorter. */
+    #sheet { position: absolute; z-index: 1100; left: 0; right: 0; bottom: 0; height: var(--sheet-h); background: var(--card);
+             border-radius: 22px 22px 0 0; box-shadow: 0 -6px 24px rgba(15, 23, 42, .22); display: flex; flex-direction: column;
+             transition: height .25s ease; padding-bottom: env(safe-area-inset-bottom); }
+    body { --sheet-h: var(--sheet-peek); }
+    body[data-sheet="half"] { --sheet-h: var(--sheet-half); }
+    body[data-sheet="full"] { --sheet-h: var(--sheet-full); }
+    #handle { flex: none; height: 26px; display: flex; align-items: center; justify-content: center; cursor: grab; touch-action: none; }
+    #handle span { width: 44px; height: 5px; border-radius: 3px; background: var(--line); }
+    #summary { flex: none; padding: 0 16px 8px; max-height: 96px; overflow-y: auto; }
+    #message { font-size: 15px; font-weight: 600; }
+    #fuelLine { font-size: 13px; color: var(--muted); margin-top: 2px; }
+    #warnLine { font-size: 13px; font-weight: 700; color: var(--warn); margin-top: 2px; }
+    #fuelLine:empty, #warnLine:empty { display: none; }
+
+    /* The tab bar */
+    #tabs { flex: none; display: grid; grid-template-columns: repeat(6, 1fr); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+    #tabs button { border: 0; background: transparent; padding: 7px 2px 6px; display: flex; flex-direction: column; align-items: center; gap: 1px;
+                   color: var(--muted); border-bottom: 3px solid transparent; }
+    #tabs .ico { font-size: 19px; line-height: 1.1; }
+    #tabs .lbl { font-size: 11px; font-weight: 700; }
+    #tabs button.active { color: var(--text); border-bottom-color: var(--accent); }
+
+    /* The content area under the tabs: one "pane" shows at a time */
+    #panes { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+    #plan, #favs, #dirs, #trips, #settings { display: none; }
+
+    /* Rows in the lists */
+    .stop, .item { padding: 12px 16px; border-bottom: 1px solid var(--line); font-size: 15px; cursor: pointer; }
+    .stop:hover, .item:hover, .choice:hover { background: var(--field); }
+    .stop.cheap { background: var(--good-bg); }
+    .stop.danger { background: var(--bad-bg); }
+    .stop.tip { background: var(--tip-bg); cursor: default; }
+    .item.now { background: var(--tip-bg); font-weight: 700; }
+    .item.rest10 { border-left: 4px solid #3b82f6; }
+    .item.break30 { border-left: 4px solid var(--accent); }
+    #plan .item, #stops .tip { cursor: default; }
+    #stops button.star, #stops button.price { float: right; border: 0; background: var(--field); border-radius: 12px; width: 40px; height: 40px;
+                                              margin-left: 6px; font-size: 19px; padding: 0; }
+    #favs button, #trips .item button { border: 0; background: var(--field); border-radius: 10px; padding: 6px 12px; margin-left: 8px; font-size: 14px; }
+    #dirControls { position: sticky; top: 0; z-index: 1; display: flex; gap: 14px; align-items: center; padding: 10px 16px;
+                   background: var(--card); border-bottom: 1px solid var(--line); }
+    #navButton, #trips .item:first-child button { border: 0; border-radius: 12px; background: var(--accent); color: var(--accent-ink); font-weight: 800; padding: 10px 16px; margin-left: 0; }
+    #dirControls label { display: flex; align-items: center; gap: 6px; font-size: 14px; }
+
+    /* The Truck tab (settings) */
+    #settings { padding: 12px 16px 28px; }
+    #settings section { margin-bottom: 20px; }
+    #settings h3 { margin: 0 0 8px; font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+    #truck, #hours { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    #truck label, #hours label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+    #truck input[type=number], #hours input, #truck select { height: 44px; width: 100%; border: 1px solid var(--line); background: var(--field); border-radius: 10px; padding: 0 10px; font-size: 16px; }
+    .wide { grid-column: 1 / -1; }
+    #truck label.check { flex-direction: row; align-items: center; gap: 10px; color: var(--text); font-size: 15px; }
+    #truck label.check input { width: 22px; height: 22px; }
+    #settings .themeToggle { padding: 10px 16px; font-size: 15px; }
+
+    /* Driving mode: a big, high-contrast "next turn" card, and everything else gets out of the way */
+    #navBar { display: none; position: absolute; z-index: 1300; left: 10px; right: 10px; top: calc(10px + env(safe-area-inset-top));
+              background: #10131a; color: #fff; border-radius: 18px; padding: 16px 18px; font-size: 24px; font-weight: 800; line-height: 1.25; box-shadow: var(--shadow); }
+    #stopFab { display: none; position: absolute; z-index: 1300; right: 12px; bottom: calc(var(--sheet-h) + 12px);
+               border: 0; border-radius: 999px; background: #dc2626; color: #fff; font-weight: 800; padding: 12px 18px; box-shadow: var(--shadow); }
+    body.driving #stopFab { display: block; }
+    body.driving #search { display: none; }
+
+    #iosHint { display: none; position: absolute; z-index: 1300; left: 10px; right: 10px; bottom: calc(var(--sheet-h) + 10px);
+               background: #10131a; color: #fff; border-radius: 14px; padding: 12px 14px; font-size: 14px; }
+    #iosHint button { margin-left: 8px; padding: 4px 12px; border: 0; border-radius: 8px; background: var(--accent); font-weight: 700; }
+
     .pin { font-size: 22px; text-shadow: 0 1px 3px #000; }
-    /* The driver-hours strip (same look as the truck strip) */
-    #hours { padding: 8px 16px; background: #ffe0a3; display: flex; flex-wrap: wrap; gap: 14px; align-items: center; font-size: 14px; }
-    #hours label { display: flex; align-items: center; gap: 6px; }
-    #hours input { width: 70px; padding: 6px; font-size: 15px; border: 1px solid #ccc; border-radius: 6px; }
-    #hours input[type=datetime-local] { width: 190px; }
-    /* Tabs under the map */
-    #tabs { display: flex; background: #f5a623; }
-    #tabs button { flex: 1; padding: 8px; font-size: 15px; font-weight: bold; border: 0; background: transparent; cursor: pointer; }
-    #tabs button.active { background: #fff; }
-    #favs { display: none; max-height: 170px; overflow-y: auto; background: #fff; }
-    #favs .item { padding: 8px 16px; border-bottom: 1px solid #eee; font-size: 15px; cursor: pointer; }
-    #favs button, #stops button.star { border: 0; background: #ffe9c2; border-radius: 6px; padding: 3px 9px; margin-left: 6px; cursor: pointer; font-size: 14px; }
-    #stops button.star { float: right; font-size: 20px; background: #fff3dc; border: 1px solid #f5a623; padding: 2px 8px; }
-    #plan { display: none; max-height: 170px; overflow-y: auto; background: #fff; }
-    #plan .item { padding: 8px 16px; border-bottom: 1px solid #eee; font-size: 15px; }
-    #plan .item.rest10 { border-left: 4px solid #3b82f6; }
-    #plan .item.break30 { border-left: 4px solid #f5a623; }
-    #plan small { color: #666; display: block; }
-    /* The truck settings strip */
-    #truck { padding: 8px 16px; background: #ffe9c2; display: flex; flex-wrap: wrap; gap: 14px; align-items: center; font-size: 14px; }
-    #truck label { display: flex; align-items: center; gap: 6px; }
-    #truck input[type=number] { width: 80px; padding: 6px; font-size: 15px; border: 1px solid #ccc; border-radius: 6px; }
+
+    /* Phones: the map's own zoom buttons are hidden (you pinch instead) and its credit line sits above the panel */
+    @media (max-width: 899px) {
+      body[data-sheet="full"] #search { display: none; }      /* with the panel fully open, the search card steps aside */
+      .leaflet-control-zoom { display: none; }
+      .leaflet-bottom { bottom: var(--sheet-h); transition: bottom .25s ease; }
+    }
+    /* Computers and tablets: a permanent side panel on the left, the map on the right */
+    @media (min-width: 900px) {
+      #app { display: grid; grid-template-columns: 430px 1fr; grid-template-rows: auto 1fr; }
+      #map { position: relative; grid-column: 2; grid-row: 1 / span 2; }
+      #search { position: relative; inset: auto; grid-column: 1; grid-row: 1; margin: 12px; }
+      #sheet { position: relative; grid-column: 1; grid-row: 2; height: auto; min-height: 0; border-radius: 0; box-shadow: none;
+               border-top: 1px solid var(--line); transition: none; }
+      #handle { display: none; }
+      #sheet { padding-top: 10px; }
+      #summary { max-height: none; }
+      #search.compact #brandRow { display: flex; }
+      #navBar { left: 442px; }
+      #stopFab { bottom: 16px; }
+      #iosHint { left: 442px; bottom: 12px; }
+    }
   </style>
 </head>
-<body>
-  <header>TruckRoute <button id="installButton" hidden>📲 Install app</button></header>
-  <div id="iosHint">To install on your iPhone: tap the Share button (square with an arrow), then "Add to Home Screen".
-    <button id="iosHintClose">Got it</button></div>
+<body data-sheet="peek">
+  <div id="app">
+    <div id="map"></div>
 
-  <div id="panel">
-    <input id="startBox" placeholder="Start: address, business or city">
-    <button id="startSearch" title="Show matching addresses">🔍</button>
-    <button id="meButton" title="Use my current location">📍</button>
-    <input id="endBox" placeholder="Destination: address, business or city">
-    <button id="endSearch" title="Show matching addresses">🔍</button>
-    <button id="goButton">Find route</button>
-  </div>
-  <!-- The truck and hours settings fold away so the map and stops have room. Press the bar to open them. -->
-  <div id="settingsBar"><button id="settingsToggle">⚙ Truck &amp; hours settings ▸</button></div>
-  <div id="settings" style="display:none">
-  <div id="truck">
-    <b>Your truck:</b>
-    <label>Height (ft) <input id="heightBox" type="number" step="0.1" value="13.5"></label>
-    <label>Weight (lbs) <input id="weightBox" type="number" step="500" value="80000"></label>
-    <label>Length (ft) <input id="lengthBox" type="number" step="0.5" value="70"></label>
-    <label>Width (ft) <input id="widthBox" type="number" step="0.1" value="8.5"></label>
-    <label>Fuel economy (MPG) <input id="mpgBox" type="number" step="0.1" value="6.5"></label>
-    <label><input id="hazmatBox" type="checkbox"> Hazmat load</label>
-    <label>List stops by
-      <select id="sortBox"><option value="mile">Mile marker</option><option value="price">Cheapest diesel</option></select>
-    </label>
-  </div>
-  <div id="hours">
-    <b>Your hours:</b>
-    <label>Drive hours left today (max 11) <input id="driveLeftBox" type="number" step="0.25" min="0" max="11" value="11"></label>
-    <label>Window left (max 14) <input id="windowLeftBox" type="number" step="0.25" min="0" max="14" value="14"></label>
-    <label>Driven since last 30-min break <input id="sinceBreakBox" type="number" step="0.25" min="0" max="8" value="0"></label>
-    <label>Leaving at <input id="departBox" type="datetime-local"></label>
-  </div>
-  </div>
-  <div id="choices"></div>
-  <div id="message">Type a start and a destination, then press Find route.</div>
-  <div id="fuelLine"></div>
-  <div id="warnLine"></div>
-  <div id="navBar"></div>
-
-  <div id="map"></div>
-  <div id="tabs">
-    <button id="tabStops" class="active">Stops</button>
-    <button id="tabPlan">Driving plan</button>
-    <button id="tabFavs">⭐ Favorites</button>
-    <button id="tabDirs">Directions</button>
-    <button id="tabTrips">💾 Trips</button>
-  </div>
-  <div id="stops"><div class="stop"><small>Stops along your route will appear here.</small></div></div>
-  <div id="plan"><div class="item"><small>Your required breaks will appear here after you find a route.</small></div></div>
-  <div id="favs"></div>
-  <div id="dirs">
-    <div id="dirControls">
-      <button id="navButton">▶ Start driving (uses GPS)</button>
-      <label><input type="checkbox" id="voiceBox" checked> 🔊 Voice</label>
+    <!-- The search card -->
+    <div id="search">
+      <div id="brandRow">
+        <span id="brand">🧭 Truck<b>Route</b></span>
+        <span id="brandButtons">
+          <button id="installButton" hidden>📲 Install</button>
+          <button id="themeButton" class="themeToggle" title="Light / dark mode" aria-label="Switch light or dark mode">🌓</button>
+        </span>
+      </div>
+      <div class="field">
+        <span class="dot dotStart"></span>
+        <input id="startBox" placeholder="Start address or place" autocomplete="off">
+        <button id="startSearch" class="iconBtn" title="Show matching addresses" aria-label="Search for the start address">🔍</button>
+        <button id="meButton" class="iconBtn" title="Use my current location" aria-label="Use my current location">📍</button>
+      </div>
+      <div class="field">
+        <span class="dot dotEnd"></span>
+        <input id="endBox" placeholder="Where to? Address or place" autocomplete="off">
+        <button id="endSearch" class="iconBtn" title="Show matching addresses" aria-label="Search for the destination address">🔍</button>
+      </div>
+      <button id="goButton">Find route</button>
+      <div id="choices"></div>
     </div>
-    <div id="dirList"></div>
+
+    <div id="iosHint">To install on your iPhone: tap the Share button (square with an arrow), then "Add to Home Screen".
+      <button id="iosHintClose">Got it</button></div>
+    <div id="navBar"></div>
+    <button id="stopFab">■ Stop driving</button>
+
+    <!-- The slide-up panel -->
+    <div id="sheet">
+      <div id="handle" role="button" aria-label="Make the panel taller or shorter"><span></span></div>
+      <div id="summary">
+        <div id="message">Type a start and a destination, then press Find route.</div>
+        <div id="fuelLine"></div>
+        <div id="warnLine"></div>
+      </div>
+      <nav id="tabs">
+        <button id="tabStops" class="active"><span class="ico">⛽</span><span class="lbl">Stops</span></button>
+        <button id="tabPlan"><span class="ico">🕒</span><span class="lbl">Plan</span></button>
+        <button id="tabDirs"><span class="ico">🧭</span><span class="lbl">Drive</span></button>
+        <button id="tabFavs"><span class="ico">⭐</span><span class="lbl">Favs<span id="favCount"></span></span></button>
+        <button id="tabTrips"><span class="ico">💾</span><span class="lbl">Trips<span id="tripCount"></span></span></button>
+        <button id="tabTruck"><span class="ico">🚛</span><span class="lbl">Truck</span></button>
+      </nav>
+
+      <div id="panes">
+        <div id="stops"><div class="stop tip"><small>Stops along your route will appear here.</small></div></div>
+        <div id="plan"><div class="item"><small>Your required breaks will appear here after you find a route.</small></div></div>
+        <div id="favs"></div>
+        <div id="dirs">
+          <div id="dirControls">
+            <button id="navButton">▶ Start driving</button>
+            <label><input type="checkbox" id="voiceBox" checked> 🔊 Voice</label>
+          </div>
+          <div id="dirList"></div>
+        </div>
+        <div id="trips"></div>
+
+        <div id="settings">
+          <section>
+            <h3>Your truck</h3>
+            <div id="truck">
+              <label>Height (ft) <input id="heightBox" type="number" step="0.1" value="13.5"></label>
+              <label>Weight (lbs) <input id="weightBox" type="number" step="500" value="80000"></label>
+              <label>Length (ft) <input id="lengthBox" type="number" step="0.5" value="70"></label>
+              <label>Width (ft) <input id="widthBox" type="number" step="0.1" value="8.5"></label>
+              <label>Fuel economy (MPG) <input id="mpgBox" type="number" step="0.1" value="6.5"></label>
+              <label>List stops by
+                <select id="sortBox"><option value="mile">Mile marker</option><option value="price">Cheapest diesel</option></select>
+              </label>
+              <label class="check wide"><input id="hazmatBox" type="checkbox"> Hazmat load</label>
+            </div>
+          </section>
+          <section>
+            <h3>Your hours (US rules)</h3>
+            <div id="hours">
+              <label>Drive hours left today (max 11) <input id="driveLeftBox" type="number" step="0.25" min="0" max="11" value="11"></label>
+              <label>14-hour window left <input id="windowLeftBox" type="number" step="0.25" min="0" max="14" value="14"></label>
+              <label>Driven since last 30-min break <input id="sinceBreakBox" type="number" step="0.25" min="0" max="8" value="0"></label>
+              <label>Leaving at <input id="departBox" type="datetime-local"></label>
+            </div>
+          </section>
+          <section>
+            <h3>Look</h3>
+            <button class="themeToggle">🌓 Switch light / dark</button>
+          </section>
+          <section>
+            <small>Map data © OpenStreetMap contributors. Routing: Valhalla. Addresses: Nominatim and Photon.
+              Stops and restrictions come from community data and may be incomplete. The hours plan is a planning aid,
+              not a legal log - use your ELD and obey posted signs.</small>
+          </section>
+        </div>
+      </div>
+    </div>
   </div>
-  <div id="trips"></div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
   <script>
@@ -613,8 +741,6 @@
         row.onclick = () => { map.setView([s.lat, s.lon], 14); marker.openPopup(); };  // click a row to jump to it
         box.appendChild(row);
       }
-      // When the search is done, scroll the page just enough that the list is on screen.
-      if (isFinal) box.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
       }   // end of draw()
     }
 
@@ -819,7 +945,7 @@
       const box = document.getElementById('favs');
       box.innerHTML = '';
       favMarkers.clearLayers();
-      document.getElementById('tabFavs').textContent = '⭐ Favorites' + (favorites.length ? ' (' + favorites.length + ')' : '');
+      document.getElementById('favCount').textContent = favorites.length ? ' (' + favorites.length + ')' : '';
       if (!favorites.length) {
         box.innerHTML = '<div class="item"><small>Tap the ☆ on any stop to save it here.</small></div>';
         return;
@@ -858,26 +984,21 @@
     }
     renderFavorites();
 
-    // Switch between the "Stops", "Driving plan" and "Favorites" tabs.
+    // Switch between the six tabs at the bottom (Stops, Plan, Drive, Favs, Trips, Truck).
     function showTab(which) {
-      for (const [name, tabId] of [['stops', 'tabStops'], ['plan', 'tabPlan'], ['favs', 'tabFavs'], ['dirs', 'tabDirs'], ['trips', 'tabTrips']]) {
+      for (const [name, tabId] of [['stops', 'tabStops'], ['plan', 'tabPlan'], ['dirs', 'tabDirs'], ['favs', 'tabFavs'], ['trips', 'tabTrips'], ['settings', 'tabTruck']]) {
         document.getElementById(name).style.display = which === name ? 'block' : 'none';
         document.getElementById(tabId).className = which === name ? 'active' : '';
       }
+      document.getElementById('panes').scrollTop = 0;
+      if (getSheet() === 'peek') setSheet('half');    // pressing a tab opens the panel if it was folded down
     }
     document.getElementById('tabStops').onclick = () => showTab('stops');
     document.getElementById('tabPlan').onclick = () => showTab('plan');
-    document.getElementById('tabFavs').onclick = () => showTab('favs');
     document.getElementById('tabDirs').onclick = () => showTab('dirs');
+    document.getElementById('tabFavs').onclick = () => showTab('favs');
     document.getElementById('tabTrips').onclick = () => showTab('trips');
-
-    // Open / close the folded-away truck and hours settings.
-    document.getElementById('settingsToggle').onclick = () => {
-      const panel = document.getElementById('settings');
-      const opening = panel.style.display === 'none';
-      panel.style.display = opening ? 'block' : 'none';
-      document.getElementById('settingsToggle').textContent = '⚙ Truck & hours settings ' + (opening ? '▾' : '▸');
-    };
+    document.getElementById('tabTruck').onclick = () => showTab('settings');
 
     // ---------- STEP 6a: places we already know exactly ----------
     // Normally we turn what you type into a map location by searching. But some places we already know to
@@ -1056,9 +1177,11 @@
       nav.index = index;
 
       // Show your position on the map.
-      if (!youMarker) youMarker = L.circleMarker([lat, lon], { radius: 9, color: '#fff', weight: 3, fillColor: '#2563eb', fillOpacity: 1 }).addTo(map);
+      const firstFix = !youMarker;
+      if (firstFix) youMarker = L.circleMarker([lat, lon], { radius: 9, color: '#fff', weight: 3, fillColor: '#2563eb', fillOpacity: 1 }).addTo(map);
       youMarker.setLatLng([lat, lon]);
-      map.panTo([lat, lon], { animate: true });
+      if (firstFix) map.setView([lat, lon], 15);           // zoom in on the truck the first time
+      else map.panTo([lat, lon], { animate: true });       // after that, just follow it
 
       // What's the next turn? The first step that begins ahead of us.
       let j = maneuvers.findIndex(m => m.begin_shape_index > index);
@@ -1101,6 +1224,8 @@
       if (!currentRoute) { say('Find a route first, then press Start driving.'); return; }
       if (!navigator.geolocation) { say('This device has no GPS access.'); return; }
       nav.active = true; nav.index = 0; nav.spoken = {};
+      document.body.classList.add('driving');   // driving mode: big next-turn card, search card hidden
+      setSheet('peek');
       document.getElementById('navButton').textContent = '■ Stop driving';
       document.getElementById('navBar').style.display = 'block';
       document.getElementById('navBar').textContent = 'Waiting for GPS...';
@@ -1113,12 +1238,13 @@
     }
     function stopNav() {
       nav.active = false;
+      document.body.classList.remove('driving');
       if (nav.watchId !== null && navigator.geolocation) navigator.geolocation.clearWatch(nav.watchId);
       nav.watchId = null;
       try { if (nav.wakeLock) nav.wakeLock.release(); } catch (e) { }
       nav.wakeLock = null;
       try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch (e) { }
-      document.getElementById('navButton').textContent = '▶ Start driving (uses GPS)';
+      document.getElementById('navButton').textContent = '▶ Start driving';
       document.getElementById('navBar').style.display = 'none';
       if (youMarker) { map.removeLayer(youMarker); youMarker = null; }
     }
@@ -1134,7 +1260,7 @@
     function renderTrips() {
       const box = document.getElementById('trips');
       box.innerHTML = '';
-      document.getElementById('tabTrips').textContent = '💾 Trips' + (trips.length ? ' (' + trips.length + ')' : '');
+      document.getElementById('tripCount').textContent = trips.length ? ' (' + trips.length + ')' : '';
 
       const top = document.createElement('div');
       top.className = 'item';
@@ -1250,7 +1376,14 @@
         const line = L.polyline(path, { color: '#e07b00', weight: 6 }).addTo(routeStuff);
         L.marker([start.lat, start.lon]).addTo(routeStuff).bindPopup('Start');
         L.marker([end.lat, end.lon]).addTo(routeStuff).bindPopup('Destination');
-        map.fitBounds(line.getBounds(), { padding: [30, 30] });
+        // Fold the search card down and show the results panel, then fit the route into the part of the map that is still visible.
+        document.getElementById('search').classList.add('compact');
+        if (getSheet() === 'peek' && !nav.active) setSheet('half');
+        const onPhone = window.innerWidth < 900;
+        map.fitBounds(line.getBounds(), {
+          paddingTopLeft: [30, (onPhone ? document.getElementById('search').offsetHeight : 0) + 30],
+          paddingBottomRight: [30, onPhone ? Math.round(window.innerHeight * (getSheet() === 'peek' ? 0.22 : 0.52)) + 20 : 30]
+        });
 
         const miles = trip.summary.length.toFixed(0);
         const hours = Math.floor(trip.summary.time / 3600);
@@ -1307,6 +1440,44 @@
       document.getElementById('iosHint').style.display = 'none';
       try { localStorage.setItem('iosHintDismissed', '1'); } catch (e) { }
     };
+
+    // ---------- STEP 8: the new look ----------
+    // The bottom panel ("sheet") has three heights: peek (just the summary and tabs), half, and full.
+    // Tap its handle to cycle through them, or drag the handle up or down.
+    const SHEETS = ['peek', 'half', 'full'];
+    function getSheet() { return document.body.dataset.sheet || 'peek'; }
+    function setSheet(state) { document.body.dataset.sheet = state; }
+    {
+      const handle = document.getElementById('handle');
+      let startY = null;
+      handle.addEventListener('pointerdown', (event) => { startY = event.clientY; handle.setPointerCapture(event.pointerId); });
+      handle.addEventListener('pointerup', (event) => {
+        if (startY === null) return;
+        const moved = event.clientY - startY, i = SHEETS.indexOf(getSheet());
+        startY = null;
+        if (Math.abs(moved) < 8) setSheet(SHEETS[(i + 1) % SHEETS.length]);            // a tap: next height
+        else if (moved < 0) setSheet(SHEETS[Math.min(SHEETS.length - 1, i + 1)]);       // dragged up: taller
+        else setSheet(SHEETS[Math.max(0, i - 1)]);                                      // dragged down: shorter
+      });
+    }
+    // When you tap into an address box to start a new search, the folded-down search card opens up again.
+    document.getElementById('search').addEventListener('focusin', () => document.getElementById('search').classList.remove('compact'));
+
+    // Light / dark mode: remembered on this device. The page picks your phone's setting the first time.
+    function applyTheme(theme) {
+      document.documentElement.setAttribute('data-theme', theme);
+      const color = theme === 'dark' ? '#181d25' : '#f5a623';
+      document.querySelector('meta[name=theme-color]').setAttribute('content', color);
+      try { localStorage.setItem('theme', theme); } catch (e) { }
+    }
+    applyTheme(document.documentElement.getAttribute('data-theme') || 'light');
+    document.querySelectorAll('.themeToggle').forEach(button => {
+      button.onclick = () => applyTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+    });
+
+    // Driving mode: the red Stop button, and tapping the arrival message to dismiss it.
+    document.getElementById('stopFab').onclick = () => stopNav();
+    document.getElementById('navBar').onclick = () => { if (!nav.active) document.getElementById('navBar').style.display = 'none'; };
   </script>
 </body>
 </html>
