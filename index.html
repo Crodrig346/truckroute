@@ -181,17 +181,77 @@
 
     // Asks Nominatim (the free address search) for up to 6 matches and tidies them up.
     // Note: its rules say not to search on every keystroke, so we only search when you press Enter or 🔍.
-    async function searchPlaces(text) {
-      const url = 'https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=6&countrycodes=us,ca,mx&q='
-                  + encodeURIComponent(text);
-      const response = await fetch(url);          // ask the service
-      if (!response.ok) throw new Error('The address search service is busy. Try again in a moment.');
-      const results = await response.json();      // read its answer
-      return results.map(r => ({
+    // Suite, unit and floor numbers aren't in the map data and make searches fail ("123 Main St Suite 200"),
+    // so we remove them before searching.
+    function cleanAddress(text) {
+      return text
+        .replace(/[,\s]+(suite|ste|unit|apt|apartment|bldg|building|floor|fl|room|rm|dock|door)\.?\s*#?\s*[\w-]+/gi, '')
+        .replace(/\s*#\s*[\w-]+/g, '')
+        .replace(/\s{2,}/g, ' ').replace(/\s+,/g, ',').trim();
+    }
+    // If the map is zoomed in, prefer results near where it's looking (so "Pilot" means the Pilot near you).
+    function mapBias() { return map.getZoom() >= 8 ? { bounds: map.getBounds(), center: map.getCenter() } : null; }
+
+    // Photon prints US states in full ("Texas"); we want "TX".
+    const STATE_CODES = { alabama:'AL', alaska:'AK', arizona:'AZ', arkansas:'AR', california:'CA', colorado:'CO', connecticut:'CT', delaware:'DE',
+      'district of columbia':'DC', florida:'FL', georgia:'GA', hawaii:'HI', idaho:'ID', illinois:'IL', indiana:'IN', iowa:'IA', kansas:'KS',
+      kentucky:'KY', louisiana:'LA', maine:'ME', maryland:'MD', massachusetts:'MA', michigan:'MI', minnesota:'MN', mississippi:'MS', missouri:'MO',
+      montana:'MT', nebraska:'NE', nevada:'NV', 'new hampshire':'NH', 'new jersey':'NJ', 'new mexico':'NM', 'new york':'NY', 'north carolina':'NC',
+      'north dakota':'ND', ohio:'OH', oklahoma:'OK', oregon:'OR', pennsylvania:'PA', 'rhode island':'RI', 'south carolina':'SC', 'south dakota':'SD',
+      tennessee:'TN', texas:'TX', utah:'UT', vermont:'VT', virginia:'VA', washington:'WA', 'west virginia':'WV', wisconsin:'WI', wyoming:'WY' };
+
+    // Address search service #1: Nominatim.
+    async function searchNominatim(text, bias) {
+      let url = 'https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=6&countrycodes=us,ca,mx&q=' + encodeURIComponent(text);
+      if (bias) { const b = bias.bounds; url += '&viewbox=' + [b.getWest(), b.getNorth(), b.getEast(), b.getSouth()].join(','); }   // a hint, not a limit
+      const response = await fetch(url);
+      if (!response.ok) throw new Error('busy');
+      return (await response.json()).map(r => ({
         lat: Number(r.lat), lon: Number(r.lon), label: shortLabel(r), full: r.display_name,
         kind: r.addresstype || r.type,
         precise: !AREA_KINDS.includes(r.addresstype || r.type)    // true = an exact spot, false = a whole town/county
       }));
+    }
+    // Address search service #2: Photon. Also free and also built on OpenStreetMap, but it forgives typos
+    // and spelling differences, and finds business names better.
+    async function searchPhoton(text, bias) {
+      let url = 'https://photon.komoot.io/api/?limit=6&lang=en&q=' + encodeURIComponent(text);
+      if (bias) url += '&lat=' + bias.center.lat.toFixed(4) + '&lon=' + bias.center.lng.toFixed(4);
+      const response = await fetch(url);
+      if (!response.ok) throw new Error('busy');
+      return (await response.json()).features
+        .filter(f => ['US', 'CA', 'MX'].includes(f.properties.countrycode))
+        .map(f => {
+          const p = f.properties;
+          const street = [p.housenumber, p.street].filter(Boolean).join(' ');
+          const town = p.city || p.town || p.village || p.district || p.county;
+          const state = STATE_CODES[(p.state || '').toLowerCase()] || p.state;
+          const first = p.name && p.name !== p.street && p.name !== town && p.name !== street ? p.name : '';
+          const label = [first, street, town, state].filter(Boolean).join(', ') || p.name || 'Unnamed place';
+          return { lat: f.geometry.coordinates[1], lon: f.geometry.coordinates[0], label,
+                   full: [p.name, street, town, p.state, p.postcode].filter(Boolean).join(', '),
+                   // Towns and counties are filed under "place" or "boundary"; businesses, roads and buildings are exact spots.
+                   kind: p.type, precise: !['place', 'boundary'].includes(p.osm_key) };
+        });
+    }
+
+    // Asks BOTH services at once and combines the answers (removing duplicates). Note: Nominatim's rules say
+    // not to search on every keystroke, so we only search when you press Enter or 🔍.
+    async function searchPlaces(text) {
+      const query = cleanAddress(text), bias = mapBias();
+      const [a, b] = await Promise.allSettled([searchNominatim(query, bias), searchPhoton(query, bias)]);
+      if (a.status === 'rejected' && b.status === 'rejected') throw new Error('The address search services are busy. Try again in a moment.');
+      const all = [...(a.status === 'fulfilled' ? a.value : []), ...(b.status === 'fulfilled' ? b.value : [])];
+      const seen = new Set(), unique = [];
+      for (const place of all) {
+        const key = place.lat.toFixed(3) + ',' + place.lon.toFixed(3);   // within ~100 m = the same place
+        if (!seen.has(key)) { seen.add(key); unique.push(place); }
+      }
+      // If you typed a state ("... , AR" or "... TX"), put results in that state first.
+      const typed = (query.match(/[,\s]\s*([A-Za-z]{2})\s*$/) || [])[1];
+      const wanted = typed && Object.values(STATE_CODES).includes(typed.toUpperCase()) ? typed.toUpperCase() : null;
+      if (wanted) unique.sort((x, y) => (y.label.endsWith(', ' + wanted) ? 1 : 0) - (x.label.endsWith(', ' + wanted) ? 1 : 0));
+      return unique.slice(0, 8);
     }
 
     // Used when you press "Find route" without picking from the list: take the best match automatically.
@@ -834,15 +894,27 @@
       try {
         const results = await searchPlaces(text);
         list.innerHTML = '';
-        if (!results.length) {
-          list.innerHTML = '<div class="choice"><small>No matches. Try adding the city and state, or tap the map to drop a pin.</small></div>';
-          return;
+        let heading = 'Tap the right one (🎯 = exact spot, 🏙️ = middle of a town):';
+        let places = results;
+        if (!places.length) {
+          // The exact address isn't in the free map data. Offer the town instead: pick it, then tap the map
+          // to drop a pin on the exact spot.
+          const townText = text.includes(',') ? text.split(',').slice(1).join(',').trim() : '';
+          if (townText) {
+            places = (await searchPlaces(townText)).filter(p => !p.precise);
+            heading = 'That exact address isn\'t in the free map data. Pick the town below, then tap the map to drop a pin on the exact spot:';
+          }
+          if (!places.length) {
+            list.innerHTML = '<div class="choice"><small>No matches. Check the spelling, try just the street and city, or tap the map to drop a pin.</small></div>';
+            return;
+          }
         }
         const title = document.createElement('div');
         title.className = 'choice';
-        title.innerHTML = '<small>Tap the right one (🎯 = exact spot, 🏙️ = middle of a town):</small>';
+        title.innerHTML = '<small></small>';
+        title.querySelector('small').textContent = heading;
         list.appendChild(title);
-        for (const place of results) {
+        for (const place of places) {
           const row = document.createElement('div');
           row.className = 'choice';
           row.textContent = (place.precise ? '🎯 ' : '🏙️ ') + place.label;
