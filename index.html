@@ -1,0 +1,1089 @@
+<!doctype html>
+<!-- TruckRoute - Step 2: type a start and destination, get a truck route -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+
+  <!-- Making the page installable as an app on Android and iPhone -->
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#f5a623">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="TruckRoute">
+  <title>TruckRoute</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+
+  <style>
+    /* The page is a tall column: header, panels, then the map fills whatever space is left. */
+    body { margin: 0; font-family: system-ui, sans-serif; display: flex; flex-direction: column; height: 100vh; }
+    /* env(safe-area-inset-top) keeps the header clear of the notch on newer iPhones when installed */
+    header { background: #f5a623; color: #1b1200; padding: calc(12px + env(safe-area-inset-top)) 16px 12px; font-size: 20px; font-weight: bold;
+             display: flex; justify-content: space-between; align-items: center; }
+    #installButton { font-size: 14px; font-weight: bold; padding: 6px 12px; border: 2px solid #1b1200; border-radius: 8px; background: #fff3dc; cursor: pointer; }
+    #iosHint { display: none; background: #1b1200; color: #fff; padding: 10px 16px; font-size: 14px; }
+    #iosHint button { margin-left: 10px; padding: 3px 10px; border: 0; border-radius: 6px; cursor: pointer; }
+    /* The control panel above the map */
+    #panel { padding: 10px 16px; background: #fff3dc; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    #panel input { flex: 1 1 200px; padding: 10px; font-size: 16px; border: 1px solid #ccc; border-radius: 6px; }
+    #panel button { padding: 10px 18px; font-size: 16px; font-weight: bold; background: #f5a623; border: 0; border-radius: 6px; cursor: pointer; }
+    #message { padding: 6px 16px; min-height: 20px; font-size: 15px; }
+    #map { flex: 1; min-height: 200px; }
+    /* The list of stops under the map */
+    #stops { max-height: 170px; overflow-y: auto; background: #fff; border-top: 2px solid #f5a623; }
+    #stops .stop { padding: 8px 16px; border-bottom: 1px solid #eee; cursor: pointer; font-size: 15px; }
+    #stops .stop:hover { background: #fff3dc; }
+    #stops small { color: #666; display: block; }
+    #stops .stop.cheap { background: #e8fff1; }
+    #stops .stop.danger { background: #ffe3e3; }
+    #tabs { flex-wrap: wrap; }
+    #tabs button { flex: 1 1 auto; font-size: 14px; }
+    #dirs, #trips { display: none; overflow-y: auto; background: #fff; max-height: 35vh; min-height: 90px; }
+    #dirs .item, #trips .item { padding: 8px 16px; border-bottom: 1px solid #eee; font-size: 15px; cursor: pointer; }
+    #dirs .item.now { background: #fff3dc; font-weight: bold; }
+    #dirs small, #trips small { color: #666; display: block; }
+    #dirControls { padding: 8px 16px; display: flex; gap: 14px; align-items: center; border-bottom: 1px solid #eee; position: sticky; top: 0; background: #fff; }
+    #dirControls button, #trips button { padding: 6px 12px; font-size: 14px; font-weight: bold; border: 0; border-radius: 6px; background: #f5a623; cursor: pointer; }
+    #trips .item button { margin-left: 6px; background: #ffe9c2; font-weight: normal; }
+    #navBar { display: none; background: #1b1200; color: #fff; padding: 10px 16px; font-size: 19px; font-weight: bold; }
+    #meButton { flex: 0 0 auto; }
+    #warnLine { padding: 0 16px 6px; font-size: 14px; font-weight: bold; color: #9a3412; }
+    #settingsBar { background: #ffe9c2; }
+    #settingsBar button { width: 100%; text-align: left; padding: 8px 16px; font-size: 14px; font-weight: bold; border: 0; background: transparent; cursor: pointer; }
+    #stops, #plan, #favs { max-height: 35vh; min-height: 90px; }
+    #stops .tip { background: #fffbe6; }
+    #stops button.price { float: right; border: 0; background: #ffe9c2; border-radius: 6px; padding: 3px 9px; margin-left: 6px; cursor: pointer; font-size: 14px; }
+    #truck select { padding: 6px; font-size: 14px; border: 1px solid #ccc; border-radius: 6px; }
+    #fuelLine { padding: 0 16px 6px; font-size: 14px; color: #444; }
+    .pin { font-size: 22px; text-shadow: 0 1px 3px #000; }
+    /* The driver-hours strip (same look as the truck strip) */
+    #hours { padding: 8px 16px; background: #ffe0a3; display: flex; flex-wrap: wrap; gap: 14px; align-items: center; font-size: 14px; }
+    #hours label { display: flex; align-items: center; gap: 6px; }
+    #hours input { width: 70px; padding: 6px; font-size: 15px; border: 1px solid #ccc; border-radius: 6px; }
+    #hours input[type=datetime-local] { width: 190px; }
+    /* Tabs under the map */
+    #tabs { display: flex; background: #f5a623; }
+    #tabs button { flex: 1; padding: 8px; font-size: 15px; font-weight: bold; border: 0; background: transparent; cursor: pointer; }
+    #tabs button.active { background: #fff; }
+    #favs { display: none; max-height: 170px; overflow-y: auto; background: #fff; }
+    #favs .item { padding: 8px 16px; border-bottom: 1px solid #eee; font-size: 15px; cursor: pointer; }
+    #favs button, #stops button.star { border: 0; background: #ffe9c2; border-radius: 6px; padding: 3px 9px; margin-left: 6px; cursor: pointer; font-size: 14px; }
+    #stops button.star { float: right; font-size: 20px; background: #fff3dc; border: 1px solid #f5a623; padding: 2px 8px; }
+    #plan { display: none; max-height: 170px; overflow-y: auto; background: #fff; }
+    #plan .item { padding: 8px 16px; border-bottom: 1px solid #eee; font-size: 15px; }
+    #plan .item.rest10 { border-left: 4px solid #3b82f6; }
+    #plan .item.break30 { border-left: 4px solid #f5a623; }
+    #plan small { color: #666; display: block; }
+    /* The truck settings strip */
+    #truck { padding: 8px 16px; background: #ffe9c2; display: flex; flex-wrap: wrap; gap: 14px; align-items: center; font-size: 14px; }
+    #truck label { display: flex; align-items: center; gap: 6px; }
+    #truck input[type=number] { width: 80px; padding: 6px; font-size: 15px; border: 1px solid #ccc; border-radius: 6px; }
+  </style>
+</head>
+<body>
+  <header>TruckRoute <button id="installButton" hidden>📲 Install app</button></header>
+  <div id="iosHint">To install on your iPhone: tap the Share button (square with an arrow), then "Add to Home Screen".
+    <button id="iosHintClose">Got it</button></div>
+
+  <div id="panel">
+    <input id="startBox" placeholder="Start (e.g. Memphis, TN)">
+    <button id="meButton" title="Use my current location">📍</button>
+    <input id="endBox" placeholder="Destination (e.g. Nashville, TN)">
+    <button id="goButton">Find route</button>
+  </div>
+  <!-- The truck and hours settings fold away so the map and stops have room. Press the bar to open them. -->
+  <div id="settingsBar"><button id="settingsToggle">⚙ Truck &amp; hours settings ▸</button></div>
+  <div id="settings" style="display:none">
+  <div id="truck">
+    <b>Your truck:</b>
+    <label>Height (ft) <input id="heightBox" type="number" step="0.1" value="13.5"></label>
+    <label>Weight (lbs) <input id="weightBox" type="number" step="500" value="80000"></label>
+    <label>Length (ft) <input id="lengthBox" type="number" step="0.5" value="70"></label>
+    <label>Width (ft) <input id="widthBox" type="number" step="0.1" value="8.5"></label>
+    <label>Fuel economy (MPG) <input id="mpgBox" type="number" step="0.1" value="6.5"></label>
+    <label><input id="hazmatBox" type="checkbox"> Hazmat load</label>
+    <label>List stops by
+      <select id="sortBox"><option value="mile">Mile marker</option><option value="price">Cheapest diesel</option></select>
+    </label>
+  </div>
+  <div id="hours">
+    <b>Your hours:</b>
+    <label>Drive hours left today (max 11) <input id="driveLeftBox" type="number" step="0.25" min="0" max="11" value="11"></label>
+    <label>Window left (max 14) <input id="windowLeftBox" type="number" step="0.25" min="0" max="14" value="14"></label>
+    <label>Driven since last 30-min break <input id="sinceBreakBox" type="number" step="0.25" min="0" max="8" value="0"></label>
+    <label>Leaving at <input id="departBox" type="datetime-local"></label>
+  </div>
+  </div>
+  <div id="message">Type a start and a destination, then press Find route.</div>
+  <div id="fuelLine"></div>
+  <div id="warnLine"></div>
+  <div id="navBar"></div>
+
+  <div id="map"></div>
+  <div id="tabs">
+    <button id="tabStops" class="active">Stops</button>
+    <button id="tabPlan">Driving plan</button>
+    <button id="tabFavs">⭐ Favorites</button>
+    <button id="tabDirs">Directions</button>
+    <button id="tabTrips">💾 Trips</button>
+  </div>
+  <div id="stops"><div class="stop"><small>Stops along your route will appear here.</small></div></div>
+  <div id="plan"><div class="item"><small>Your required breaks will appear here after you find a route.</small></div></div>
+  <div id="favs"></div>
+  <div id="dirs">
+    <div id="dirControls">
+      <button id="navButton">▶ Start driving (uses GPS)</button>
+      <label><input type="checkbox" id="voiceBox" checked> 🔊 Voice</label>
+    </div>
+    <div id="dirList"></div>
+  </div>
+  <div id="trips"></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <script>
+    // ---------- The map (same as step 1) ----------
+    const map = L.map('map').setView([39.5, -98.35], 4);
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+
+    // We keep the route line and pins in one "layer group" so we can clear them before drawing a new route.
+    const routeStuff = L.layerGroup().addTo(map);
+
+    function say(text) { document.getElementById('message').textContent = text; }
+
+    // ---------- Piece 1: turn a place name into map coordinates ----------
+    // Computers navigate with numbers (latitude and longitude), not names.
+    // "Geocoding" converts "Memphis, TN" into numbers. We use a free service called Nominatim.
+    async function findPlace(name) {
+      const url = 'https://nominatim.openstreetmap.org/search?format=json&limit=5&countrycodes=us,ca,mx&q='
+                  + encodeURIComponent(name);
+      const response = await fetch(url);          // ask the service
+      const results = await response.json();      // read its answer
+      if (results.length === 0) throw new Error('Could not find "' + name + '". Try adding the state.');
+      // The first answer is sometimes a whole county, whose "center" can be in the countryside far from a road.
+      // So we prefer an answer that is an actual city, town or village, and fall back to the first answer.
+      const towns = ['city', 'town', 'village', 'hamlet', 'suburb', 'house', 'road'];
+      const best = results.find(r => towns.includes(r.addresstype)) || results[0];
+      return { lat: Number(best.lat), lon: Number(best.lon) };
+    }
+
+    // ---------- Piece 2: ask for a truck route between two points ----------
+    // We use a free routing service called Valhalla. "truck" tells it to use roads trucks can use.
+    // NEW in step 3: we also send the truck's size so it avoids roads and bridges that don't fit.
+    // The service wants metric units (meters and metric tons), so we convert from feet and pounds.
+    const FEET_TO_METERS = 0.3048;
+    const POUNDS_TO_TONS = 0.000453592;
+
+    async function getRoute(start, end, truck) {
+      const request = {
+        // "radius" lets the service look up to 500 m for the nearest road, in case the place we found
+        // is a city center that isn't exactly on a road.
+        locations: [ { lat: start.lat, lon: start.lon, radius: 500 }, { lat: end.lat, lon: end.lon, radius: 500 } ],
+        costing: 'truck',
+        costing_options: { truck: {
+          height: truck.heightFt * FEET_TO_METERS,
+          width: truck.widthFt * FEET_TO_METERS,
+          length: truck.lengthFt * FEET_TO_METERS,
+          weight: truck.weightLbs * POUNDS_TO_TONS,
+          hazmat: truck.hazmat
+        } },
+        directions_options: { units: 'miles' }
+      };
+      const url = 'https://valhalla1.openstreetmap.de/route?json=' + encodeURIComponent(JSON.stringify(request));
+      const response = await fetch(url);
+      const data = await response.json();
+      if (!data.trip) {
+        // Error 154 = trip too long for the free service. Otherwise pass along the service's own explanation.
+        if (data.error_code === 154) {
+          throw new Error('That trip is longer than the free routing service allows (about 930 miles as the crow flies). Try a shorter trip for now.');
+        }
+        throw new Error('No truck route found. The routing service said: ' + (data.error || 'unknown reason') + '. Try adding the state to each place, e.g. "Dallas, TX".');
+      }
+      return data.trip;
+    }
+
+    // ---------- Piece 3: decode the route's shape ----------
+    // The service sends the route's path as a compressed string of letters to save space.
+    // This function unpacks it into a list of map points. (You don't need to understand it - it's a standard recipe.)
+    function decodeShape(encoded) {
+      let index = 0, lat = 0, lon = 0;
+      const points = [];
+      while (index < encoded.length) {
+        for (const isLat of [true, false]) {
+          let shift = 0, result = 0, byte;
+          do {
+            byte = encoded.charCodeAt(index++) - 63;
+            result |= (byte & 31) << shift;
+            shift += 5;
+          } while (byte >= 32);
+          const change = (result & 1) ? ~(result >> 1) : (result >> 1);
+          if (isLat) lat += change; else lon += change;
+        }
+        points.push([lat / 1e6, lon / 1e6]);
+      }
+      return points;
+    }
+
+    // ---------- STEP 4: stops along the route ----------
+    // Stop locations come from OpenStreetMap too, through a free service called Overpass.
+    // Think of Overpass as a search engine for the map's database: we ask "show me every gas station
+    // within 2 miles of this line" and it answers with a list.
+
+    // Overpass is run by volunteers and is sometimes overloaded, so we know several copies ("mirrors").
+    // If one doesn't answer within 45 seconds, we try the next. We also remember which one worked last
+    // and start with it next time, so we don't keep waiting on servers that are down.
+    const OVERPASS_SERVERS = [
+      'https://overpass-api.de/api/interpreter',
+      'https://overpass.private.coffee/api/interpreter',
+      'https://overpass.kumi.systems/api/interpreter',
+      'https://overpass.openstreetmap.fr/api/interpreter'
+    ];
+    let luckyServer = 0;   // position of the server that answered most recently
+    async function askOverpass(query) {
+      for (let tried = 0; tried < OVERPASS_SERVERS.length; tried++) {
+        const which = (luckyServer + tried) % OVERPASS_SERVERS.length;
+        const timer = new AbortController();
+        const giveUp = setTimeout(() => timer.abort(), 100000);   // the free servers can take over a minute
+        try {
+          const response = await fetch(OVERPASS_SERVERS[which], { method: 'POST', body: 'data=' + encodeURIComponent(query), signal: timer.signal });
+          if (response.ok) {
+            const data = await response.json();
+            // An overloaded server sometimes says "OK" but gives an empty list plus a note like "runtime error".
+            // That does NOT mean "no stops here", so we treat it as a failure and try another server.
+            if (data.remark && /error|timed out|out of memory/i.test(data.remark)) continue;
+            luckyServer = which;
+            return data.elements || [];
+          }
+        } catch (e) { /* this server didn't answer; try the next one */ }
+        finally { clearTimeout(giveUp); }
+      }
+      throw new Error('The free stop-data service is busy right now. Your route is fine - try again in a few minutes.');
+    }
+
+    // Before the real searching, send a tiny test question to every server at once and remember
+    // whichever answers first. That way we don't waste a minute waiting on servers that are down.
+    async function pickFastestServer() {
+      const tiny = '[out:json][timeout:10];node(1);out;';
+      await new Promise(resolve => {
+        let decided = false;
+        const giveUp = setTimeout(resolve, 15000);
+        OVERPASS_SERVERS.forEach((server, which) => {
+          fetch(server, { method: 'POST', body: 'data=' + encodeURIComponent(tiny) })
+            .then(r => { if (r.ok && !decided) { decided = true; luckyServer = which; clearTimeout(giveUp); resolve(); } })
+            .catch(() => { /* that server is down; ignore */ });
+        });
+      });
+    }
+
+    // Distance in miles between two map points (the "haversine" formula - a standard recipe).
+    function miles(a, b) {
+      const R = 3958.8, rad = Math.PI / 180;
+      const dLat = (b[0] - a[0]) * rad, dLon = (b[1] - a[1]) * rad;
+      const x = Math.sin(dLat / 2) ** 2 + Math.cos(a[0] * rad) * Math.cos(b[0] * rad) * Math.sin(dLon / 2) ** 2;
+      return 2 * R * Math.asin(Math.sqrt(x));
+    }
+
+    // How far (in miles) a place is from the route LINE near path point `i`. The route is a chain of points
+    // joined by straight segments, and on a straight highway the points can be far apart, so measuring to the
+    // nearest point alone would overestimate. We measure to the segments around that point instead.
+    function awayFromRoute(path, i, lat, lon) {
+      const perDegree = 69.17, cosLat = Math.cos(lat * Math.PI / 180);
+      const toXY = p => [p[1] * cosLat * perDegree, p[0] * perDegree];
+      const [px, py] = toXY([lat, lon]);
+      let best = Infinity;
+      for (let k = Math.max(0, i - 3); k < Math.min(path.length - 1, i + 3); k++) {
+        const [ax, ay] = toXY(path[k]), [bx, by] = toXY(path[k + 1]);
+        const dx = bx - ax, dy = by - ay, len2 = dx * dx + dy * dy;
+        const t = len2 ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / len2)) : 0;
+        best = Math.min(best, Math.hypot(px - (ax + t * dx), py - (ay + t * dy)));
+      }
+      return best === Infinity ? miles(path[i], [lat, lon]) : best;
+    }
+
+    // A route has thousands of points. Overpass only needs the rough shape, so we thin the list out,
+    // keeping the corners (this is called "simplifying" the line).
+    function simplify(points, maxPoints) {
+      let step = 1;
+      while (points.length / step > maxPoints) step++;
+      const thin = points.filter((p, i) => i % step === 0);
+      thin.push(points[points.length - 1]);
+      return thin;
+    }
+
+    // Decide what kind of place an OpenStreetMap entry is.
+    const TRUCK_STOP_BRANDS = /pilot|flying j|love'?s|travel ?centers? of america|\bta\b|petro|sapp bros|buc-ee|roady|ambest/i;
+    function kindOf(tags) {
+      // Weigh stations (where trucks may have to pull in to be weighed and inspected).
+      if (tags.amenity === 'weighbridge' || /weigh station|port of entry|inspection station/i.test(tags.name || '')) return 'scale';
+      // Big chains like Flying J are sometimes filed as "services", but drivers know them as truck stops.
+      if (TRUCK_STOP_BRANDS.test((tags.brand || '') + ' ' + (tags.name || ''))) return 'truck';
+      if (tags.highway === 'rest_area' || tags.highway === 'services') return 'rest';
+      if (tags.amenity === 'fuel') {
+        const looksLikeTruckStop = tags.hgv === 'yes' || tags.shower === 'yes' ||
+                                   TRUCK_STOP_BRANDS.test((tags.brand || '') + ' ' + (tags.name || ''));
+        return looksLikeTruckStop ? 'truck' : 'fuel';
+      }
+      // Parking lots that are marked as being for trucks ("hgv" = heavy goods vehicle = truck).
+      if (tags.amenity === 'parking' && (tags.hgv === 'yes' || tags.hgv === 'designated' || tags['capacity:hgv'] || tags['parking:hgv'])) return 'parking';
+      return null;
+    }
+    const ICONS = { fuel: '⛽', truck: '🚛', rest: '🅿️', scale: '⚖️', parking: '🅿️', bridge: '🌉' };
+    const NAMES = { fuel: 'Fuel', truck: 'Truck stop', rest: 'Rest area', scale: 'Weigh station', parking: 'Truck parking', bridge: 'Low clearance' };
+
+    // ---------- Low clearances ----------
+    // Map volunteers sometimes tag a bridge or tunnel with its posted height ("maxheight"), written in many
+    // styles: 4.1 (meters), 13'6" or 13.5 ft. This turns any of them into meters, or nothing if it can't tell.
+    function parseHeight(text) {
+      const v = String(text).trim().toLowerCase();
+      let m;
+      if ((m = v.match(/^(\d+)\s*'\s*(\d+)?/))) return (Number(m[1]) + (Number(m[2]) || 0) / 12) * FEET_TO_METERS;
+      if ((m = v.match(/^([\d.]+)\s*(ft|feet)/))) return Number(m[1]) * FEET_TO_METERS;
+      if ((m = v.match(/^([\d.]+)\s*m?$/))) return Number(m[1]);
+      return null;   // things like "none" or "default"
+    }
+    // Meters back to a trucker-friendly 13'6" style.
+    function fmtFt(meters) {
+      const feet = meters / FEET_TO_METERS, whole = Math.floor(feet);
+      return whole + "'" + Math.round((feet - whole) * 12) + '"';
+    }
+
+    const stopMarkers = L.layerGroup().addTo(map);
+
+    async function showStops(path) {
+      const box = document.getElementById('stops');
+      stopMarkers.clearLayers();
+      box.innerHTML = '<div class="stop"><small>Looking for fuel, truck stops and rest areas...</small></div>';
+
+      // Cumulative miles along the route, so we can say "mile 87".
+      const along = [0];
+      for (let i = 1; i < path.length; i++) along.push(along[i - 1] + miles(path[i - 1], path[i]));
+
+      // One giant question for a 700-mile route is too much for a free service. So we cut the route into
+      // sections of about 75 miles and ask about each section separately (two at a time, to be polite).
+      const sections = [];
+      let current = [path[0]], sectionMiles = 0;
+      for (let i = 1; i < path.length; i++) {
+        current.push(path[i]);
+        sectionMiles += miles(path[i - 1], path[i]);
+        if (sectionMiles >= 50) { sections.push(current); current = [path[i]]; sectionMiles = 0; }
+      }
+      if (current.length > 1) sections.push(current);
+
+      await pickFastestServer();
+      const found = [], seen = new Set();
+      let finished = 0, failed = 0, nextSection = 0;
+      async function worker() {
+        while (nextSection < sections.length) {
+          const section = sections[nextSection++];
+          // Ask for everything within 2 miles (3200 m) of this section's route line.
+          const line = simplify(section, 30).map(p => p[0].toFixed(4) + ',' + p[1].toFixed(4)).join(',');
+          const near = '(around:2400,' + line + ')';   // 1.5 miles either side: a smaller area is a lighter question
+          const query = '[out:json][timeout:90];(nwr[amenity=fuel]' + near + ';nwr[highway=rest_area]' + near +
+                        ';nwr[highway=services]' + near +
+                        // weigh stations: tagged as "weighbridge", or with a telling name
+                        ';nwr[amenity=weighbridge]' + near +
+                        ';nwr[name~"weigh station|port of entry|inspection station",i]' + near +
+                        // truck parking lots
+                        ';nwr[amenity=parking][hgv~"^(yes|designated)$"]' + near +
+                        ';nwr[amenity=parking]["capacity:hgv"]' + near +
+                        // anything with a posted height limit (we check the height ourselves, in draw())
+                        ';nwr[maxheight]' + near + ';nwr["maxheight:physical"]' + near + ';);out center tags 500;';
+          try {
+            for (const item of await askOverpass(query)) {
+              const id = item.type + item.id;
+              if (!seen.has(id)) { seen.add(id); found.push(item); }   // skip duplicates where sections overlap
+            }
+          } catch (e) { failed++; }
+          finished++;
+          draw(false);   // show what we have so far
+        }
+      }
+      await Promise.all([worker(), worker()]);
+      if (failed === sections.length) {
+        throw new Error('The free stop-data service is busy right now. Your route is fine - try again in a few minutes.');
+      }
+      redrawStops = () => { draw(true); updateFuelLine(); };   // lets price changes refresh the list later
+      draw(true);   // final version of the list
+      renderPlan(); // now that we know the stops, suggest where to take each break
+      updateFuelLine();
+
+      // draw() turns everything found so far into pins and a list. It runs after each section finishes,
+      // so you see stops appear as they arrive instead of waiting for the whole route.
+      function draw(isFinal) {
+      stopMarkers.clearLayers();
+      const progress = isFinal ? '' : '<div class="stop"><small>Still searching: ' + finished + ' of ' + sections.length + ' sections done...</small></div>';
+      const note = failed ? '<div class="stop"><small>Note: ' + failed + ' of ' + sections.length +
+                            ' sections could not be searched (service busy), so some stops may be missing.</small></div>' : '';
+      const stops = [];
+      const truckHeightM = Number(document.getElementById('heightBox').value) * FEET_TO_METERS;
+      for (const item of found) {
+        const lat = item.lat ?? (item.center && item.center.lat);
+        const lon = item.lon ?? (item.center && item.center.lon);
+        const tags = item.tags || {};
+        let kind = kindOf(tags);
+        // Anything that isn't a stop but has a posted height: keep it only if it's low enough to matter
+        // (lower than your truck, or within 1.5 feet of it).
+        let clearance = null;
+        if (!kind) {
+          const posted = [tags.maxheight, tags['maxheight:physical']].map(v => v && parseHeight(v)).filter(v => v).sort((a, b) => a - b)[0];
+          if (posted && posted <= truckHeightM + 1.5 * FEET_TO_METERS) { kind = 'bridge'; clearance = posted; }
+        }
+        if (lat == null || !kind) continue;
+
+        // Which spot on the route is closest to this stop? That gives its mile marker.
+        let best = Infinity, bestIndex = 0;
+        for (let i = 0; i < path.length; i += 2) {
+          const d = Math.abs(path[i][0] - lat) + Math.abs(path[i][1] - lon);
+          if (d < best) { best = d; bestIndex = i; }
+        }
+        // A weigh station only matters if you can actually reach it from your road, so skip ones far away.
+        const away = awayFromRoute(path, bestIndex, lat, lon);
+        if (kind === 'scale' && away > 1.5) continue;
+        // A low clearance only matters if it's actually ON your road, so keep it only if it's within ~0.1 mile.
+        if (kind === 'bridge' && away > 0.1) continue;
+        stops.push({ key: item.type + '/' + item.id, kind, clearance, lat, lon, name: tags.name || tags.brand || NAMES[kind],
+                     mile: along[bestIndex], away, tags });
+      }
+      stops.sort((a, b) => a.mile - b.mile);
+      currentStops = stops;   // the driving plan uses this list to suggest where to stop
+
+      // The warning line under the route summary.
+      const tooLow = stops.filter(s => s.kind === 'bridge' && s.clearance < truckHeightM).length;
+      const tight = stops.filter(s => s.kind === 'bridge' && s.clearance >= truckHeightM).length;
+      document.getElementById('warnLine').textContent =
+        tooLow ? '⛔ ' + tooLow + ' posted clearance(s) LOWER than your truck near this route - check the list (some may be side streets or overpasses you don\'t pass under).'
+        : tight ? '🌉 ' + tight + ' tight clearance(s) within 1.5 ft of your truck height near this route.'
+        : isFinal ? '✅ No low clearances found near your route. (Only heights that map volunteers have entered can be checked.)' : '';
+
+      if (stops.length === 0) { box.innerHTML = (isFinal ? '<div class="stop"><small>No stops found near this route.</small></div>' : progress) + note; return; }
+      box.innerHTML = progress + note +
+        '<div class="stop tip"><small>Tip: tap the ☆ on the right of a stop to save it to ⭐ Favorites, or 💲 to enter its diesel price.</small></div>';
+
+      // Which stop has the lowest diesel price that someone has reported?
+      const cheapestKey = cheapestStopKey(stops);
+      // The list is in mile order, unless you chose "Cheapest diesel" - then only fuel stops, cheapest first.
+      const shown = document.getElementById('sortBox').value === 'price'
+        ? stops.filter(s => s.kind === 'fuel' || s.kind === 'truck').sort((a, b) => (prices[a.key] ? prices[a.key].p : 99) - (prices[b.key] ? prices[b.key].p : 99))
+        : stops;
+      for (const s of shown) {
+        const tooLowForYou = s.kind === 'bridge' && s.clearance < truckHeightM;
+        const icon = tooLowForYou ? '⛔' : ICONS[s.kind];
+        const marker = L.marker([s.lat, s.lon], {
+          icon: L.divIcon({ className: '', html: '<div class="pin">' + icon + '</div>', iconSize: [26, 26] })
+        }).addTo(stopMarkers).bindPopup('<b>' + s.name.replace(/</g, '&lt;') + '</b><br>' + NAMES[s.kind] +
+                                        (s.kind === 'bridge' ? '<br>Posted clearance ' + fmtFt(s.clearance) : ''));
+
+        const row = document.createElement('div');
+        row.className = 'stop';
+        row.textContent = icon + ' ' + s.name + '  - ' + NAMES[s.kind];
+        const detail = document.createElement('small');
+        detail.textContent = 'mile ' + s.mile.toFixed(0) + ' - ' + s.away.toFixed(1) + ' mi off route' + priceText(s, cheapestKey) +
+                            (s.kind === 'scale' ? ' - open/closed status not available' : '') +
+                            (s.kind === 'parking' && s.tags['capacity:hgv'] ? ' - ' + s.tags['capacity:hgv'] + ' truck spaces' : '') +
+                            (s.kind === 'bridge' ? ' - clearance ' + fmtFt(s.clearance) + (tooLowForYou ? ' - LOWER than your truck!' : ' - tight for your truck') : '');
+        if (s.key === cheapestKey) row.classList.add('cheap');   // green background for the cheapest diesel
+        if (tooLowForYou) row.classList.add('danger');           // red background for clearances too low for you
+        row.appendChild(detail);
+        if (s.kind !== 'bridge') row.prepend(starButton(s));   // the ☆ / ⭐ button on the right of each row
+        if (s.kind === 'fuel' || s.kind === 'truck') row.prepend(priceButton(s));   // the 💲 button
+        row.onclick = () => { map.setView([s.lat, s.lon], 14); marker.openPopup(); };  // click a row to jump to it
+        box.appendChild(row);
+      }
+      // When the search is done, scroll the page just enough that the list is on screen.
+      if (isFinal) box.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }   // end of draw()
+    }
+
+    // ---------- STEP 5a: hours-of-service planner ----------
+    // US law limits how long a truck driver can drive. This planner knows the main rules for
+    // property-carrying drivers and works out where on your trip you'd have to stop:
+    //   - 11 hours: the most you can DRIVE after 10 hours off duty.
+    //   - 14 hours: after you start your day, you can't drive past a 14-hour "window" (even while resting).
+    //   - 30 minutes: you need a 30-minute break once you've driven 8 hours in a row.
+    // It's a planning aid, not your legal logbook. Your ELD (electronic logging device) is the official record.
+
+    let currentTrip = null;    // {hours, miles} of the route on screen
+    let currentStops = [];     // the stops found along it (filled in by showStops)
+
+    // Default the "Leaving at" box to right now. (The box wants a special text format, hence the odd math.)
+    (function () {
+      const now = new Date();
+      now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+      document.getElementById('departBox').value = now.toISOString().slice(0, 16);
+    })();
+
+    // Walk through the trip hour by hour and note every time a rule forces a stop.
+    function planDriving(totalHours, totalMiles) {
+      let driveLeft = Math.min(11, Number(document.getElementById('driveLeftBox').value));
+      let windowLeft = Math.min(14, Number(document.getElementById('windowLeftBox').value));
+      let sinceBreak = Math.min(8, Number(document.getElementById('sinceBreakBox').value));
+      let clock = new Date(document.getElementById('departBox').value || Date.now());
+      const leaveAt = new Date(clock);
+      const events = [];
+      let drivenHours = 0, remaining = totalHours, safety = 0;
+
+      while (remaining > 0.000001 && safety++ < 200) {
+        // Drive until the trip ends or a rule says stop - whichever comes first.
+        const canDrive = Math.min(remaining, driveLeft, windowLeft, Math.max(0, 8 - sinceBreak));
+        if (canDrive > 0) {
+          drivenHours += canDrive; remaining -= canDrive;
+          driveLeft -= canDrive; windowLeft -= canDrive; sinceBreak += canDrive;
+          clock = new Date(clock.getTime() + canDrive * 3600000);
+        }
+        if (remaining <= 0.000001) break;
+
+        const mile = totalMiles * drivenHours / totalHours;   // roughly where on the route we are
+        if (driveLeft <= 0.000001 || windowLeft <= 0.000001) {
+          events.push({ kind: 'rest10', mile, time: new Date(clock),
+                        why: driveLeft <= 0.000001 ? 'You hit the 11-hour driving limit' : 'Your 14-hour window ran out' });
+          clock = new Date(clock.getTime() + 10 * 3600000);   // 10 hours off duty resets everything
+          driveLeft = 11; windowLeft = 14; sinceBreak = 0;
+        } else {
+          events.push({ kind: 'break30', mile, time: new Date(clock), why: 'You\'ve driven 8 hours - 30-minute break required' });
+          clock = new Date(clock.getTime() + 30 * 60000);
+          windowLeft -= 0.5; sinceBreak = 0;                  // the break also uses up window time
+        }
+      }
+      return { events, leaveAt, arrive: clock };
+    }
+
+    // Find the best place to stop: the closest truck stop or rest area BEFORE you'd run out of legal hours.
+    function bestStopFor(event) {
+      const options = currentStops.filter(s => (s.kind === 'truck' || s.kind === 'rest' || s.kind === 'parking') && s.away <= 3 && s.mile <= event.mile);
+      options.sort((a, b) => b.mile - a.mile);
+      if (event.kind === 'rest10') {
+        const trucky = options.filter(s => s.kind === 'truck' || s.tags.hgv === 'yes' || s.tags.parking_hgv);
+        if (trucky.length) return trucky[0];   // for a long rest, prefer a real truck stop
+      }
+      return options[0] || null;
+    }
+
+    function renderPlan() {
+      const box = document.getElementById('plan');
+      if (!currentTrip) return;
+      const plan = planDriving(currentTrip.hours, currentTrip.miles);
+      const when = d => d.toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' });
+      box.innerHTML = '';
+
+      const top = document.createElement('div');
+      top.className = 'item';
+      top.textContent = 'Leave ' + when(plan.leaveAt) + '  ->  arrive ' + when(plan.arrive);
+      const sub = document.createElement('small');
+      sub.textContent = plan.events.length ? plan.events.length + ' required stop(s) on this trip. Planning aid only - your ELD is the legal record.'
+                                           : 'No required stops on this trip.';
+      top.appendChild(sub);
+      box.appendChild(top);
+
+      for (const ev of plan.events) {
+        const stop = bestStopFor(ev);
+        const row = document.createElement('div');
+        row.className = 'item ' + ev.kind;
+        row.textContent = (ev.kind === 'rest10' ? '🛏️ 10-hour rest' : '☕ 30-minute break') + ' around mile ' + ev.mile.toFixed(0) + ' - ' + when(ev.time);
+        const why = document.createElement('small');
+        why.textContent = ev.why;
+        row.appendChild(why);
+        const suggestion = document.createElement('small');
+        if (stop) suggestion.textContent = 'Best stop: ' + ICONS[stop.kind] + ' ' + stop.name + ' (mile ' + stop.mile.toFixed(0) + ', ' + (ev.mile - stop.mile).toFixed(0) + ' miles before your limit)';
+        else suggestion.textContent = currentStops.length ? 'No truck stop or rest area found before this point - plan ahead!' : 'Stops are still loading...';
+        row.appendChild(suggestion);
+        row.style.cursor = stop ? 'pointer' : 'default';
+        if (stop) row.onclick = () => map.setView([stop.lat, stop.lon], 13);
+        box.appendChild(row);
+      }
+    }
+    // Recalculate whenever you change your hours.
+    for (const id of ['driveLeftBox', 'windowLeftBox', 'sinceBreakBox', 'departBox']) {
+      document.getElementById(id).addEventListener('change', renderPlan);
+    }
+
+    // ---------- STEP 5c: fuel prices ----------
+    // There is no free, live diesel-price feed for the whole country (the good ones are paid services).
+    // So for now YOU enter the price when you see it at the pump. We remember it, show how old it is,
+    // highlight the cheapest stop, and estimate what your trip will cost.
+    // Later, many drivers' reports could be shared through a backend, or we could buy a real price feed.
+    let prices = {};            // {stop key: {p: dollars per gallon, t: when it was entered}}
+    let redrawStops = null;     // set by showStops so we can refresh the list after a price changes
+    try { prices = JSON.parse(localStorage.getItem('myPrices')) || {}; } catch (e) { prices = {}; }
+    function savePrices() { try { localStorage.setItem('myPrices', JSON.stringify(prices)); } catch (e) { } }
+
+    function ageText(t) {
+      const hours = (Date.now() - t) / 3600000;
+      return hours < 1 ? 'just now' : hours < 48 ? Math.round(hours) + 'h ago' : Math.round(hours / 24) + 'd ago';
+    }
+    // The text added to a stop row, e.g. " - $3.89 diesel (2h ago) - cheapest"
+    function priceText(stop, cheapestKey) {
+      const entry = prices[stop.key];
+      if (!entry) return '';
+      return ' - $' + entry.p.toFixed(2) + ' diesel (' + ageText(entry.t) + ')' + (stop.key === cheapestKey ? ' - CHEAPEST' : '');
+    }
+    function cheapestStopKey(stops) {
+      let bestKey = null;
+      for (const s of stops) {
+        if ((s.kind === 'fuel' || s.kind === 'truck') && prices[s.key] && (!bestKey || prices[s.key].p < prices[bestKey].p)) bestKey = s.key;
+      }
+      return bestKey;
+    }
+    function priceButton(stop) {
+      const button = document.createElement('button');
+      button.className = 'price';
+      button.title = 'Enter the diesel price you saw here';
+      button.textContent = '💲';
+      button.onclick = (event) => {
+        event.stopPropagation();
+        const answer = prompt('Diesel price per gallon at ' + stop.name + ' (example: 3.89):', prices[stop.key] ? prices[stop.key].p : '');
+        if (answer === null) return;                       // you pressed Cancel
+        const value = parseFloat(answer);
+        if (!(value > 0 && value < 20)) { say('That doesn\'t look like a price. Try something like 3.89.'); return; }
+        prices[stop.key] = { p: value, t: Date.now() };
+        savePrices();
+        if (redrawStops) redrawStops();                    // refresh the list so the new price shows
+      };
+      return button;
+    }
+    // The line under the route summary: gallons needed and estimated cost.
+    function updateFuelLine() {
+      const line = document.getElementById('fuelLine');
+      if (!currentTrip) { line.textContent = ''; return; }
+      const mpg = Number(document.getElementById('mpgBox').value) || 6.5;
+      const gallons = currentTrip.miles / mpg;
+      const key = cheapestStopKey(currentStops);
+      let text = '⛽ About ' + gallons.toFixed(0) + ' gallons of diesel at ' + mpg + ' MPG. ';
+      if (key) {
+        const stop = currentStops.find(s => s.key === key);
+        text += 'About $' + (gallons * prices[key].p).toFixed(0) + ' at the cheapest price you entered ($' + prices[key].p.toFixed(2) + ' at ' + stop.name + ').';
+      } else {
+        text += 'Tap 💲 on a fuel stop to enter a price and compare.';
+      }
+      line.textContent = text;
+    }
+    document.getElementById('mpgBox').addEventListener('change', updateFuelLine);
+    document.getElementById('sortBox').addEventListener('change', () => { if (redrawStops) redrawStops(); });
+
+    // ---------- STEP 5b: favorite stops ----------
+    // A favorite is a stop you've starred - say, the truck stop with the good showers.
+    // We save the list in the browser's "notebook" (localStorage, explained in step 3) so it's still there tomorrow.
+    let favorites = [];
+    let endOverride = null;   // set when you press "Route here"
+    try { favorites = JSON.parse(localStorage.getItem('myFavorites')) || []; } catch (e) { favorites = []; }
+    function saveFavorites() { try { localStorage.setItem('myFavorites', JSON.stringify(favorites)); } catch (e) { } }
+    const isFavorite = key => favorites.some(f => f.key === key);
+
+    const favMarkers = L.layerGroup().addTo(map);   // ⭐ pins that stay on the map
+
+    function toggleFavorite(stop) {
+      if (isFavorite(stop.key)) favorites = favorites.filter(f => f.key !== stop.key);
+      else favorites.push({ key: stop.key, kind: stop.kind, name: stop.name, lat: stop.lat, lon: stop.lon });
+      saveFavorites();
+      renderFavorites();
+    }
+
+    // Builds the little star button for one stop row.
+    function starButton(stop) {
+      const button = document.createElement('button');
+      button.className = 'star';
+      button.title = 'Save as favorite';
+      button.textContent = isFavorite(stop.key) ? '⭐' : '☆';
+      button.onclick = (event) => {
+        event.stopPropagation();   // don't also "click" the row underneath
+        toggleFavorite(stop);
+        button.textContent = isFavorite(stop.key) ? '⭐' : '☆';
+      };
+      return button;
+    }
+
+    function renderFavorites() {
+      const box = document.getElementById('favs');
+      box.innerHTML = '';
+      favMarkers.clearLayers();
+      document.getElementById('tabFavs').textContent = '⭐ Favorites' + (favorites.length ? ' (' + favorites.length + ')' : '');
+      if (!favorites.length) {
+        box.innerHTML = '<div class="item"><small>Tap the ☆ on any stop to save it here.</small></div>';
+        return;
+      }
+      for (const f of favorites) {
+        L.marker([f.lat, f.lon], { icon: L.divIcon({ className: '', html: '<div class="pin">⭐</div>', iconSize: [26, 26] }) })
+          .addTo(favMarkers).bindPopup('<b>' + f.name.replace(/</g, '&lt;') + '</b><br>' + NAMES[f.kind]);
+
+        const row = document.createElement('div');
+        row.className = 'item';
+        row.textContent = ICONS[f.kind] + ' ' + f.name + '  ';
+
+        const go = document.createElement('button');
+        go.textContent = 'Route here';
+        go.onclick = (event) => {
+          event.stopPropagation();
+          endOverride = { text: f.name, lat: f.lat, lon: f.lon };
+          knownPlaces[f.name] = { lat: f.lat, lon: f.lon };
+          document.getElementById('endBox').value = f.name;
+          say('Destination set to ' + f.name + '. Press Find route.');
+        };
+        const remove = document.createElement('button');
+        remove.textContent = '✕';
+        remove.title = 'Remove';
+        remove.onclick = (event) => {
+          event.stopPropagation();
+          favorites = favorites.filter(x => x.key !== f.key);
+          saveFavorites();
+          renderFavorites();
+        };
+        row.appendChild(go);
+        row.appendChild(remove);
+        row.onclick = () => map.setView([f.lat, f.lon], 14);
+        box.appendChild(row);
+      }
+    }
+    renderFavorites();
+
+    // Switch between the "Stops", "Driving plan" and "Favorites" tabs.
+    function showTab(which) {
+      for (const [name, tabId] of [['stops', 'tabStops'], ['plan', 'tabPlan'], ['favs', 'tabFavs'], ['dirs', 'tabDirs'], ['trips', 'tabTrips']]) {
+        document.getElementById(name).style.display = which === name ? 'block' : 'none';
+        document.getElementById(tabId).className = which === name ? 'active' : '';
+      }
+    }
+    document.getElementById('tabStops').onclick = () => showTab('stops');
+    document.getElementById('tabPlan').onclick = () => showTab('plan');
+    document.getElementById('tabFavs').onclick = () => showTab('favs');
+    document.getElementById('tabDirs').onclick = () => showTab('dirs');
+    document.getElementById('tabTrips').onclick = () => showTab('trips');
+
+    // Open / close the folded-away truck and hours settings.
+    document.getElementById('settingsToggle').onclick = () => {
+      const panel = document.getElementById('settings');
+      const opening = panel.style.display === 'none';
+      panel.style.display = opening ? 'block' : 'none';
+      document.getElementById('settingsToggle').textContent = '⚙ Truck & hours settings ' + (opening ? '▾' : '▸');
+    };
+
+    // ---------- STEP 6a: places we already know exactly ----------
+    // Normally we turn what you type into a map location by searching. But some places we already know to
+    // the exact spot: a favorite, a saved trip, or your own GPS position. We keep those here by their name.
+    const knownPlaces = {};          // "name as typed" -> {lat, lon}
+    let lastSearch = null;           // the start and end of the route on screen (used by "Save trip")
+    async function resolvePlace(text) {
+      return knownPlaces[text] ? { lat: knownPlaces[text].lat, lon: knownPlaces[text].lon } : await findPlace(text);
+    }
+    // The 📍 button: put your current GPS position in the Start box.
+    document.getElementById('meButton').onclick = () => {
+      if (!navigator.geolocation) { say('This device has no GPS access.'); return; }
+      say('Finding your location...');
+      navigator.geolocation.getCurrentPosition(
+        p => { knownPlaces['My location'] = { lat: p.coords.latitude, lon: p.coords.longitude };
+               document.getElementById('startBox').value = 'My location'; say('Start set to your current location.'); },
+        e => say('Could not get your location: ' + e.message));
+    };
+
+    // ---------- STEP 6b: turn-by-turn directions, live navigation and voice ----------
+    // The routing service returns the route as a list of "maneuvers" (turn left, merge, exit...), each tied to
+    // a point on the route line. For live navigation we watch your GPS position, work out where you are on
+    // the line, and tell you what's coming next - on screen and out loud.
+    let currentRoute = null;         // {path: route points, along: miles at each point, maneuvers: steps}
+    const nav = { active: false, watchId: null, index: 0, spoken: {}, lastReroute: 0, rerouting: false, wakeLock: null };
+    let youMarker = null;
+
+    function cumulativeMiles(path) {
+      const along = [0];
+      for (let i = 1; i < path.length; i++) along.push(along[i - 1] + miles(path[i - 1], path[i]));
+      return along;
+    }
+
+    // Say something out loud with the browser's built-in voice (if the Voice box is ticked).
+    function speak(text) {
+      if (!document.getElementById('voiceBox').checked) return;
+      try { if (window.speechSynthesis) window.speechSynthesis.speak(new SpeechSynthesisUtterance(text)); } catch (e) { }
+    }
+
+    function renderDirections() {
+      const list = document.getElementById('dirList');
+      list.innerHTML = '';
+      if (!currentRoute) { list.innerHTML = '<div class="item"><small>Find a route to see turn-by-turn directions.</small></div>'; return; }
+      currentRoute.maneuvers.forEach((m, j) => {
+        const row = document.createElement('div');
+        row.className = 'item'; row.id = 'step' + j;
+        row.textContent = m.instruction;
+        const dist = document.createElement('small');
+        dist.textContent = m.length.toFixed(1) + ' mi';
+        row.appendChild(dist);
+        row.onclick = () => map.setView(currentRoute.path[m.begin_shape_index], 15);
+        list.appendChild(row);
+      });
+    }
+
+    function nearestIndex(path, lat, lon, from, to) {
+      let best = Infinity, bestIndex = from;
+      for (let i = from; i < to; i++) {
+        const d = Math.abs(path[i][0] - lat) + Math.abs(path[i][1] - lon);
+        if (d < best) { best = d; bestIndex = i; }
+      }
+      return bestIndex;
+    }
+    const lowerFirst = s => s ? s.charAt(0).toLowerCase() + s.slice(1) : s;
+    const feetOrMiles = d => d < 0.1 ? (Math.max(50, Math.round(d * 5280 / 50) * 50) + ' ft') : d.toFixed(1) + ' mi';
+
+    // Called every time the GPS reports a new position.
+    function handleFix(lat, lon) {
+      if (!currentRoute) return;
+      const { path, along, maneuvers } = currentRoute;
+
+      // Where on the route are we? Look just ahead of where we last were first (you don't jump backwards).
+      let index = nearestIndex(path, lat, lon, Math.max(0, nav.index - 5), Math.min(path.length, nav.index + 400));
+      let away = awayFromRoute(path, index, lat, lon);
+      if (away > 0.3) {   // not near the part we expected - check the whole route before giving up
+        index = nearestIndex(path, lat, lon, 0, path.length);
+        away = awayFromRoute(path, index, lat, lon);
+      }
+      if (away > 0.3) { offRoute(lat, lon); return; }
+      nav.index = index;
+
+      // Show your position on the map.
+      if (!youMarker) youMarker = L.circleMarker([lat, lon], { radius: 9, color: '#fff', weight: 3, fillColor: '#2563eb', fillOpacity: 1 }).addTo(map);
+      youMarker.setLatLng([lat, lon]);
+      map.panTo([lat, lon], { animate: true });
+
+      // What's the next turn? The first step that begins ahead of us.
+      let j = maneuvers.findIndex(m => m.begin_shape_index > index);
+      if (j === -1) j = maneuvers.length - 1;
+      const m = maneuvers[j];
+      const dist = Math.max(0, along[Math.min(m.begin_shape_index, along.length - 1)] - along[index]);
+      const isLast = j === maneuvers.length - 1;
+
+      const bar = document.getElementById('navBar');
+      bar.style.display = 'block';
+      bar.textContent = (isLast ? '🏁 ' : '➡ ') + feetOrMiles(dist) + ' - ' + m.instruction;
+
+      // Highlight the upcoming step in the Directions list.
+      document.querySelectorAll('#dirList .item.now').forEach(e => e.classList.remove('now'));
+      const row = document.getElementById('step' + j);
+      if (row) { row.classList.add('now'); const list = document.getElementById('dirList'); list.scrollTop = row.offsetTop - list.offsetTop - 60; }
+
+      // Voice: a heads-up a mile ahead (only after long stretches), then the instruction as it gets close.
+      const spoken = nav.spoken, pre = m.verbal_pre_transition_instruction || m.instruction;
+      const longStretch = j > 0 && maneuvers[j - 1].length >= 1.5;
+      if (dist <= 1.0 && dist > 0.4 && longStretch && !spoken[j + 'far']) { spoken[j + 'far'] = true; speak('In one mile, ' + lowerFirst(pre)); }
+      if (dist <= 0.25 && !spoken[j + 'near']) { spoken[j + 'far'] = spoken[j + 'near'] = true; speak(pre); }
+      if (isLast && dist < 0.03) { speak('You have arrived.'); stopNav(); bar.style.display = 'block'; bar.textContent = '🏁 You have arrived.'; }
+    }
+
+    // You've left the route: ask for a new route starting from where you are.
+    function offRoute(lat, lon) {
+      const now = Date.now();
+      if (nav.rerouting || now - nav.lastReroute < 20000) return;   // don't spam the routing service
+      nav.rerouting = true; nav.lastReroute = now;
+      speak('You are off route. Recalculating.');
+      document.getElementById('navBar').style.display = 'block';
+      document.getElementById('navBar').textContent = '↻ Off route - recalculating...';
+      knownPlaces['My location'] = { lat, lon };
+      document.getElementById('startBox').value = 'My location';
+      document.getElementById('goButton').click();
+    }
+
+    async function startNav() {
+      if (!currentRoute) { say('Find a route first, then press Start driving.'); return; }
+      if (!navigator.geolocation) { say('This device has no GPS access.'); return; }
+      nav.active = true; nav.index = 0; nav.spoken = {};
+      document.getElementById('navButton').textContent = '■ Stop driving';
+      document.getElementById('navBar').style.display = 'block';
+      document.getElementById('navBar').textContent = 'Waiting for GPS...';
+      speak('Starting navigation.');
+      try { if (navigator.wakeLock) nav.wakeLock = await navigator.wakeLock.request('screen'); } catch (e) { }   // keep the screen awake
+      nav.watchId = navigator.geolocation.watchPosition(
+        p => handleFix(p.coords.latitude, p.coords.longitude),
+        e => say('GPS problem: ' + e.message),
+        { enableHighAccuracy: true, maximumAge: 2000 });
+    }
+    function stopNav() {
+      nav.active = false;
+      if (nav.watchId !== null && navigator.geolocation) navigator.geolocation.clearWatch(nav.watchId);
+      nav.watchId = null;
+      try { if (nav.wakeLock) nav.wakeLock.release(); } catch (e) { }
+      nav.wakeLock = null;
+      try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch (e) { }
+      document.getElementById('navButton').textContent = '▶ Start driving (uses GPS)';
+      document.getElementById('navBar').style.display = 'none';
+      if (youMarker) { map.removeLayer(youMarker); youMarker = null; }
+    }
+    document.getElementById('navButton').onclick = () => { if (nav.active) stopNav(); else startNav(); };
+    renderDirections();
+
+    // ---------- STEP 6c: saved trips ----------
+    // A saved trip remembers your start and destination so you can bring it back with one tap.
+    let trips = [];
+    try { trips = JSON.parse(localStorage.getItem('myTrips')) || []; } catch (e) { trips = []; }
+    function saveTrips() { try { localStorage.setItem('myTrips', JSON.stringify(trips)); } catch (e) { } }
+
+    function renderTrips() {
+      const box = document.getElementById('trips');
+      box.innerHTML = '';
+      document.getElementById('tabTrips').textContent = '💾 Trips' + (trips.length ? ' (' + trips.length + ')' : '');
+
+      const top = document.createElement('div');
+      top.className = 'item';
+      const saveButton = document.createElement('button');
+      saveButton.textContent = '💾 Save the current trip';
+      saveButton.onclick = (event) => {
+        event.stopPropagation();
+        if (!lastSearch) { say('Find a route first, then save it.'); return; }
+        const suggestion = lastSearch.startText + ' -> ' + lastSearch.endText;
+        const name = prompt('Name this trip:', suggestion);
+        if (name === null) return;
+        trips.push({ name: name.trim() || suggestion, startText: lastSearch.startText, endText: lastSearch.endText,
+                     start: lastSearch.start, end: lastSearch.end, saved: Date.now() });
+        saveTrips(); renderTrips();
+      };
+      top.appendChild(saveButton);
+      box.appendChild(top);
+
+      if (!trips.length) {
+        const empty = document.createElement('div');
+        empty.className = 'item';
+        empty.innerHTML = '<small>No saved trips yet. Find a route, then press Save.</small>';
+        box.appendChild(empty);
+      }
+      trips.forEach((t, k) => {
+        const row = document.createElement('div');
+        row.className = 'item';
+        row.textContent = t.name;
+        const sub = document.createElement('small');
+        sub.textContent = t.startText + ' -> ' + t.endText;
+        row.appendChild(sub);
+
+        const load = document.createElement('button');
+        load.textContent = 'Load';
+        load.onclick = (event) => {
+          event.stopPropagation();
+          knownPlaces[t.startText] = t.start; knownPlaces[t.endText] = t.end;
+          document.getElementById('startBox').value = t.startText;
+          document.getElementById('endBox').value = t.endText;
+          say('Loaded "' + t.name + '". Press Find route.');
+        };
+        const remove = document.createElement('button');
+        remove.textContent = '✕';
+        remove.title = 'Delete this trip';
+        remove.onclick = (event) => { event.stopPropagation(); trips.splice(k, 1); saveTrips(); renderTrips(); };
+        row.appendChild(load); row.appendChild(remove);
+        box.appendChild(row);
+      });
+    }
+    renderTrips();
+
+    // ---------- Remembering your truck ----------
+    // "localStorage" is a small notebook inside your browser. The page can write to it and read it back
+    // later, so you don't retype your truck size every visit. It stays on your own device.
+    function saveTruck(truck) {
+      try { localStorage.setItem('myTruck', JSON.stringify(truck)); } catch (e) { /* if the browser blocks it, no problem */ }
+    }
+    function loadTruck() {
+      try {
+        const t = JSON.parse(localStorage.getItem('myTruck'));
+        if (!t) return;
+        document.getElementById('heightBox').value = t.heightFt;
+        document.getElementById('weightBox').value = t.weightLbs;
+        document.getElementById('lengthBox').value = t.lengthFt;
+        document.getElementById('widthBox').value = t.widthFt;
+        document.getElementById('hazmatBox').checked = t.hazmat;
+        if (t.mpg) document.getElementById('mpgBox').value = t.mpg;
+      } catch (e) { }
+    }
+    loadTruck();
+
+    // ---------- Putting it together: what happens when you press the button ----------
+    document.getElementById('goButton').onclick = async function () {
+      const startText = document.getElementById('startBox').value.trim();
+      const endText = document.getElementById('endBox').value.trim();
+      if (!startText || !endText) { say('Please fill in both boxes.'); return; }
+
+      try {
+        say('Looking up your places...');
+        // For places we already know exactly (favorites, saved trips, your GPS position) we skip the search.
+        const start = await resolvePlace(startText);
+        const end = await resolvePlace(endText);
+        lastSearch = { startText, endText, start, end };   // remembered so you can save the trip
+
+        // Read the truck settings from the boxes and remember them for next time.
+        const truck = {
+          heightFt: Number(document.getElementById('heightBox').value),
+          weightLbs: Number(document.getElementById('weightBox').value),
+          lengthFt: Number(document.getElementById('lengthBox').value),
+          widthFt: Number(document.getElementById('widthBox').value),
+          hazmat: document.getElementById('hazmatBox').checked,
+          mpg: Number(document.getElementById('mpgBox').value)
+        };
+        saveTruck(truck);
+
+        say('Finding a route that fits your truck...');
+        const trip = await getRoute(start, end, truck);
+        const path = decodeShape(trip.legs[0].shape);
+        // Step 6: keep the turn-by-turn steps so the Directions tab and live navigation can use them.
+        currentRoute = { path, along: cumulativeMiles(path), maneuvers: trip.legs[0].maneuvers };
+        renderDirections();
+        nav.index = 0; nav.spoken = {}; nav.rerouting = false;
+        if (nav.active) { document.getElementById('navBar').textContent = '✔ New route ready'; speak('New route ready.'); }
+
+        // Draw it
+        routeStuff.clearLayers();
+        const line = L.polyline(path, { color: '#e07b00', weight: 6 }).addTo(routeStuff);
+        L.marker([start.lat, start.lon]).addTo(routeStuff).bindPopup('Start');
+        L.marker([end.lat, end.lon]).addTo(routeStuff).bindPopup('Destination');
+        map.fitBounds(line.getBounds(), { padding: [30, 30] });
+
+        const miles = trip.summary.length.toFixed(0);
+        const hours = Math.floor(trip.summary.time / 3600);
+        const minutes = Math.round((trip.summary.time % 3600) / 60);
+        say(miles + ' miles - about ' + hours + ' h ' + minutes + ' min of driving.');
+
+        // Step 5a: remember the trip and work out the required breaks.
+        currentTrip = { hours: trip.summary.time / 3600, miles: trip.summary.length };
+        currentStops = [];
+        renderPlan();
+        updateFuelLine();
+        document.getElementById('warnLine').textContent = '';   // clear last route's clearance warning
+
+        // Step 4: now look for stops. If this fails, the route above stays on the map.
+        try { await showStops(path); }
+        catch (stopError) {
+          document.getElementById('stops').innerHTML = '<div class="stop"><small></small></div>';
+          document.querySelector('#stops small').textContent = stopError.message;
+        }
+      } catch (error) {
+        nav.rerouting = false;
+        say('Sorry: ' + error.message);
+      }
+    };
+
+    // ---------- STEP 7: installing the app on a phone ----------
+    // 1) The "service worker" (sw.js) keeps a copy of the app on the device so it opens fast and works offline.
+    //    Browsers only allow this from a real web address (https), or from localhost while testing.
+    if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+      navigator.serviceWorker.register('sw.js').catch(() => { /* not fatal: the app still works without it */ });
+    }
+    // 2) Android and desktop Chrome: the browser says "this can be installed" - we show our own Install button.
+    let installPrompt = null;
+    window.addEventListener('beforeinstallprompt', (event) => {
+      event.preventDefault();               // hold the browser's own prompt so we can show it from our button
+      installPrompt = event;
+      document.getElementById('installButton').hidden = false;
+    });
+    document.getElementById('installButton').onclick = async () => {
+      if (!installPrompt) return;
+      installPrompt.prompt();
+      await installPrompt.userChoice;
+      installPrompt = null;
+      document.getElementById('installButton').hidden = true;
+    };
+    window.addEventListener('appinstalled', () => { document.getElementById('installButton').hidden = true; });
+    // 3) iPhone/iPad: Apple gives websites no install button, so we show a short how-to instead (once).
+    const onIos = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    const alreadyInstalled = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+    let hintDismissed = false;
+    try { hintDismissed = localStorage.getItem('iosHintDismissed') === '1'; } catch (e) { }
+    if (onIos && !alreadyInstalled && !hintDismissed) document.getElementById('iosHint').style.display = 'block';
+    document.getElementById('iosHintClose').onclick = () => {
+      document.getElementById('iosHint').style.display = 'none';
+      try { localStorage.setItem('iosHintDismissed', '1'); } catch (e) { }
+    };
+  </script>
+</body>
+</html>
