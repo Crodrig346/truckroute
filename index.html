@@ -237,8 +237,8 @@
 
     // Asks BOTH services at once and combines the answers (removing duplicates). Note: Nominatim's rules say
     // not to search on every keystroke, so we only search when you press Enter or 🔍.
-    async function searchPlaces(text) {
-      const query = cleanAddress(text), bias = mapBias();
+    async function searchBoth(query) {
+      const bias = mapBias();
       const [a, b] = await Promise.allSettled([searchNominatim(query, bias), searchPhoton(query, bias)]);
       if (a.status === 'rejected' && b.status === 'rejected') throw new Error('The address search services are busy. Try again in a moment.');
       const all = [...(a.status === 'fulfilled' ? a.value : []), ...(b.status === 'fulfilled' ? b.value : [])];
@@ -252,6 +252,29 @@
       const wanted = typed && Object.values(STATE_CODES).includes(typed.toUpperCase()) ? typed.toUpperCase() : null;
       if (wanted) unique.sort((x, y) => (y.label.endsWith(', ' + wanted) ? 1 : 0) - (x.label.endsWith(', ' + wanted) ? 1 : 0));
       return unique.slice(0, 8);
+    }
+
+    // The map data often spells things differently than people type. "WW White Rd" is stored as "W. W. White Road",
+    // so if the first search finds nothing, we retry once with common respellings: initials like "WW" or "W.W."
+    // become "W W".
+    function spellVariant(text) {
+      return text
+        .replace(/\b([A-Za-z])\1\b/g, '$1 $1')                 // WW -> W W
+        .replace(/\b([A-Za-z])\.\s*([A-Za-z])\.?(?=\s|,|$)/g, '$1 $2');   // W.W. or W. W. -> W W
+    }
+    const sleepMs = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+    async function searchPlaces(text) {
+      const query = cleanAddress(text);
+      let results = await searchBoth(query);
+      if (!results.length) {
+        const respelled = spellVariant(query);
+        if (respelled !== query) {
+          await sleepMs(1100);                       // Nominatim asks for at most one search per second
+          results = await searchBoth(respelled);
+        }
+      }
+      return results;
     }
 
     // Used when you press "Find route" without picking from the list: take the best match automatically.
@@ -899,8 +922,16 @@
         if (!places.length) {
           // The exact address isn't in the free map data. Offer the town instead: pick it, then tap the map
           // to drop a pin on the exact spot.
+          // First try the same address without the house number: that finds the STREET, which is much closer than the town.
+          const noNumber = cleanAddress(text).replace(/^\s*\d+[A-Za-z]?\s+/, '');
+          if (noNumber !== cleanAddress(text)) {
+            await sleepMs(1100);
+            places = (await searchPlaces(noNumber)).filter(p => p.precise);
+            if (places.length) heading = 'That house number isn\'t in the free map data. Here is the street - pick it, then tap the map to drop a pin on the exact spot:';
+          }
           const townText = text.includes(',') ? text.split(',').slice(1).join(',').trim() : '';
-          if (townText) {
+          if (!places.length && townText) {
+            await sleepMs(1100);
             places = (await searchPlaces(townText)).filter(p => !p.precise);
             heading = 'That exact address isn\'t in the free map data. Pick the town below, then tap the map to drop a pin on the exact spot:';
           }
