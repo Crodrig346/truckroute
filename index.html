@@ -798,7 +798,9 @@
       let step = 1;
       while (points.length / step > maxPoints) step++;
       const thin = points.filter((p, i) => i % step === 0);
-      thin.push(points[points.length - 1]);
+      // Always keep the final point, but don't add it twice (a doubled last point makes a zero-length segment,
+      // which HERE answers with no results).
+      if (thin[thin.length - 1] !== points[points.length - 1]) thin.push(points[points.length - 1]);
       return thin;
     }
 
@@ -2059,7 +2061,10 @@
     }
     // HERE "Place categories": 700-7600 fuel stations, 700-7900-0132 truck stops, 700-7900-0131 truck parking,
     // 400-4300 rest areas, 400-4200-0048 weigh stations.
-    const HERE_CATEGORIES = '700-7600-0000,700-7900-0132,700-7900-0131,400-4300-0000,400-4200-0048';
+    // IMPORTANT (learned from the owner's Diagnose results): HERE does NOT expand a parent category into its children,
+    // so each kind is listed by its exact ("leaf") id. 700-7600-0116 = gasoline/diesel station; the rest-area ids are
+    // complete (0199), restrooms+parking (0200), parking only (0201) and motorway service (0202).
+    const HERE_CATEGORIES = '700-7600-0116,700-7900-0132,700-7900-0131,400-4300-0199,400-4300-0200,400-4300-0201,400-4300-0202,400-4200-0048';
 
     // Searches a strip of about 1.5 miles either side of one section of your route. Returns the places shaped like the
     // free map data's entries, so the rest of the app (pins, lists, favorites, prices, hours plan) works unchanged.
@@ -2146,10 +2151,10 @@
       const route = encodeFlexPolyline(strip);
       const tries = [
         ['A. anything within 3 km of downtown Memphis', { at: center, in: 'circle:' + center + ';r=3000', limit: '5' }],
-        ['B. the 5 stop categories, within 5 km', { at: center, in: 'circle:' + center + ';r=5000', categories: HERE_CATEGORIES, limit: '5' }],
+        ['B. all stop categories (exact ids), within 5 km', { at: center, in: 'circle:' + center + ';r=5000', categories: HERE_CATEGORIES, limit: '5' }],
         ['C. gas stations only (700-7600-0116), within 5 km', { at: center, in: 'circle:' + center + ';r=5000', categories: '700-7600-0116', limit: '5' }],
         ['D. anything along a test route (strip 2.4 km)', { at: center, route: route + ';w=2400', limit: '5' }],
-        ['E. the 5 stop categories along the route', { at: center, route: route + ';w=2400', categories: HERE_CATEGORIES, limit: '5' }],
+        ['E. all stop categories (exact ids) along the route', { at: center, route: route + ';w=2400', categories: HERE_CATEGORIES, limit: '5' }],
         ['F. gas stations along the route, strip 5 km', { at: center, route: route + ';w=5000', categories: '700-7600-0116', limit: '5' }]
       ];
       let report = 'Diagnosing (6 requests)...';
