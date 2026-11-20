@@ -395,6 +395,8 @@
               <button id="hereRemove">Remove</button>
             </div>
             <label class="check"><input type="checkbox" id="useHere" checked> Use HERE when a key is saved</label>
+            <label class="check"><input type="checkbox" id="useHereRouting" checked> Use HERE for truck routing</label>
+            <label class="check"><input type="checkbox" id="useHereTolls" checked> Show toll prices (costs 1 extra HERE request per route)</label>
             <div id="hereStatus"></div>
             <small id="hereUsage"></small>
           </section>
@@ -639,8 +641,28 @@
 
     // Asks for the route several ways, removes duplicates, labels each one (Fastest, Shortest, Fuel saver, No tolls...)
     // and returns them with the fastest first.
+    // What to tell you about where the routes came from (shown under the route summary).
+    let routeSourceNote = '';
+
+    // With a HERE key saved (and HERE routing switched on) the routes come from HERE's truck routing. If HERE has any
+    // problem, the free router is used instead, and the message says so.
     async function buildRouteChoices(start, end, truck) {
       const prefs = readRoutePrefs();
+      routeSourceNote = '';
+      if (hereReady() && hereRoutingOn()) {
+        try {
+          const fromHere = buildRouteChoicesFrom(await hereRouteCandidates(start, end, truck, prefs), prefs, truck);
+          routeSourceNote = ' (HERE truck routing)';
+          return fromHere;
+        } catch (hereProblem) {
+          routeSourceNote = ' HERE routing was not available (' + hereProblem.message + ') so the free router was used.';
+        }
+      }
+      return buildRouteChoicesFrom(await valhallaCandidates(start, end, truck, prefs), prefs, truck);
+    }
+
+    // Asks the free router (Valhalla) for the main route, alternatives, the shortest, and no-toll / no-ferry versions.
+    async function valhallaCandidates(start, end, truck, prefs) {
       const found = [];                                   // {trip, origin: [labels that came from how we asked]}
       const [fastest, shortest] = await Promise.allSettled([
         requestRoute(start, end, truck, prefs, {}, { alternates: 2 }),
@@ -657,7 +679,12 @@
       if (found.some(f => f.trip.summary.has_ferry) && prefs.ferries !== 'avoid') extras.push(['No ferries', { use_ferry: 0 }]);
       const more = await Promise.allSettled(extras.map(([label, costing]) => requestRoute(start, end, truck, prefs, costing, {})));
       more.forEach((result, k) => { if (result.status === 'fulfilled') found.push({ trip: result.value.trip, origin: [extras[k][0]], source: 'extra' }); });
+      return found;
+    }
 
+    // Takes the candidate routes from either router, removes duplicates, labels each one (Fastest, Shortest, Fuel saver,
+    // No tolls...) and returns them with the fastest first.
+    function buildRouteChoicesFrom(found, prefs, truck) {
       // The "shortest distance" request ignores toll and ferry settings. So if you chose to avoid tolls or ferries,
       // drop any route that breaks that, as long as at least one route doesn't.
       let pool = found;
@@ -670,10 +697,11 @@
         const twin = choices.find(c => Math.abs(c.miles - summary.length) < Math.max(0.3, summary.length * 0.003) &&
                                        Math.abs(c.seconds - summary.time) < Math.max(60, summary.time * 0.01));
         if (twin) { twin.origin.push(...item.origin); twin.sources.add(item.source); continue; }      // the same route found twice: keep one, merge the labels
-        const path = decodeShape(item.trip.legs[0].shape);
+        const path = item.path || decodeShape(item.trip.legs[0].shape);    // HERE routes arrive already decoded
         choices.push({
           path, along: cumulativeMiles(path), maneuvers: item.trip.legs[0].maneuvers,
           miles: summary.length, seconds: summary.time, hasToll: !!summary.has_toll, hasFerry: !!summary.has_ferry,
+          tollCost: item.tollCost ?? null,
           gallons: estimateGallons(summary.length, summary.time, mpg), origin: [...item.origin], sources: new Set([item.source])
         });
       }
@@ -1803,7 +1831,9 @@
         const title = document.createElement('b'), main = document.createElement('span'), more = document.createElement('small');
         title.textContent = choice.title;
         main.textContent = formatDuration(choice.seconds) + ' · ' + choice.miles.toFixed(0) + ' mi';
-        more.textContent = '≈ ' + choice.gallons.toFixed(0) + ' gal' + (choice.hasToll ? ' · tolls' : '') + (choice.hasFerry ? ' · ferry' : '');
+        more.textContent = '≈ ' + choice.gallons.toFixed(0) + ' gal' +
+          (choice.hasToll ? ' · tolls' + (choice.tollCost != null ? ' $' + choice.tollCost.toFixed(choice.tollCost < 10 ? 2 : 0) : '') : '') +
+          (choice.hasFerry ? ' · ferry' : '');
         card.title = 'The fuel figure is a rough estimate from distance and average speed. It does not know about hills, wind, load or traffic.';
         card.append(title, main, more);
         card.onclick = () => chooseRoute(i);
@@ -1847,7 +1877,8 @@
       }
       renderRouteOptions();
       say(choice.miles.toFixed(0) + ' miles - about ' + formatDuration(choice.seconds) + ' of driving.' +
-          (choice.hasToll ? ' Uses toll roads.' : '') + (choice.hasFerry ? ' Uses a ferry.' : '') + lastCoarseNote);
+          (choice.hasToll ? ' Uses toll roads' + (choice.tollCost != null ? ' (about $' + choice.tollCost.toFixed(2) + ' in tolls).' : '.') : '') +
+          (choice.hasFerry ? ' Uses a ferry.' : '') + routeSourceNote + lastCoarseNote);
 
       // Work out the required breaks for this route.
       currentTrip = { hours: choice.seconds / 3600, miles: choice.miles, gallons: choice.gallons };
@@ -2101,9 +2132,118 @@
       return { type: 'here', id: item.id, lat: item.position.lat, lon: item.position.lng, tags };
     }
 
+    // ----- Truck routing (HERE Routing v8) -----
+    function hereRoutingOn() { try { return localStorage.getItem('hereRouting') !== '0'; } catch (e) { return true; } }
+    function hereTollsOn() { try { return localStorage.getItem('hereTolls') !== '0'; } catch (e) { return true; } }
+
+    // HERE sends the route's line in its own compressed "flexible polyline" format. This turns it back into points.
+    // (The same format we send HERE for stops. It was checked against HERE's own example.)
+    function decodeFlexPolyline(text) {
+      let i = 0;
+      const readVarint = () => {
+        let result = 0, shift = 0, chunk;
+        do { chunk = FLEX_ALPHABET.indexOf(text[i++]); result += (chunk & 0x1f) * 2 ** shift; shift += 5; } while (chunk & 0x20);
+        return result;
+      };
+      readVarint();                                          // format version
+      const header = readVarint(), factor = 10 ** (header & 15);
+      const readSigned = () => { const v = readVarint(); return v % 2 === 1 ? -((v + 1) / 2) : v / 2; };
+      const points = []; let lat = 0, lon = 0;
+      while (i < text.length) { lat += readSigned(); lon += readSigned(); points.push([lat / factor, lon / factor]); }
+      return points;
+    }
+
+    // Asks HERE for truck routes. HERE measures the truck in centimeters and kilograms, so we convert from feet and pounds.
+    // "extra" can ask for: alternatives (how many), short (shortest distance), avoidTolls, avoidFerries.
+    async function requestHereRoutes(start, end, truck, prefs, extra = {}) {
+      const wantTolls = hereTollsOn();
+      const params = {
+        transportMode: 'truck',
+        origin: start.lat.toFixed(6) + ',' + start.lon.toFixed(6),
+        destination: end.lat.toFixed(6) + ',' + end.lon.toFixed(6),
+        return: 'polyline,summary,actions,instructions' + (wantTolls ? ',tolls' : ''),
+        units: 'imperial', lang: 'en-US',
+        'vehicle[height]': Math.round(truck.heightFt * 30.48),
+        'vehicle[width]': Math.round(truck.widthFt * 30.48),
+        'vehicle[length]': Math.round(truck.lengthFt * 30.48),
+        'vehicle[grossWeight]': Math.round(truck.weightLbs * 0.45359237)
+      };
+      if (truck.lengthFt > 45) params['vehicle[trailerCount]'] = '1';              // a tractor-trailer, not a straight truck
+      if (truck.hazmat) params['vehicle[shippedHazardousGoods]'] = 'other';
+      if (wantTolls) params.currency = 'USD';
+      const avoid = [];
+      if (prefs.tolls === 'avoid' || extra.avoidTolls) avoid.push('tollRoad');
+      if (prefs.ferries === 'avoid' || extra.avoidFerries) avoid.push('ferry');
+      if (avoid.length) params['avoid[features]'] = avoid.join(',');
+      if (extra.short) params.routingMode = 'short';
+      if (extra.alternatives) params.alternatives = String(extra.alternatives);
+      const data = await hereFetch('https://router.hereapi.com/v8/routes', params);
+      if (wantTolls) hereBump();                         // HERE counts asking for toll prices as one extra request
+      if (!(data.routes || []).length) throw new Error('HERE found no truck route between those places.');
+      const candidates = data.routes.map(hereRouteToCandidate);
+      candidates.raw = data;
+      return candidates;
+    }
+
+    // Turns one route from HERE into the shape the rest of the app uses (the same one the free router's routes are given).
+    function hereRouteToCandidate(route) {
+      let path = [], seconds = 0, meters = 0, hasToll = false, hasFerry = false, tollTotal = 0, tollPriced = false;
+      const maneuvers = [];
+      // HERE's instructions end with a distance sentence ("Go for 3 mi."). Our screens show the distance themselves.
+      const tidy = (text) => String(text || '').replace(/\s*Go for \d[\d.,]*\s*[a-z]+\.?\s*$/i, '').trim();    // handles "Go for 0.6 mi." and "Go for 300 ft."
+      for (const section of route.sections || []) {
+        const points = decodeFlexPolyline(section.polyline);
+        const base = path.length ? path.length - 1 : 0;           // a later section starts where the previous one ended
+        path = path.length ? path.concat(points.slice(1)) : points;
+        seconds += (section.summary && section.summary.duration) || 0;
+        meters += (section.summary && section.summary.length) || 0;
+        if (section.transport && section.transport.mode === 'ferry') hasFerry = true;
+        for (const action of section.actions || []) {
+          maneuvers.push({
+            instruction: tidy(action.instruction) || action.action,
+            verbal_pre_transition_instruction: tidy(action.instruction) || action.action,
+            length: (action.length || 0) / 1609.344,
+            begin_shape_index: Math.min(path.length - 1, base + (action.offset || 0))
+          });
+        }
+        for (const toll of section.tolls || []) {
+          hasToll = true;
+          // A toll can be paid several ways (cash, transponder...). We count the cheapest way, in US dollars.
+          const prices = (toll.fares || []).map(fare => fare.convertedPrice ? fare.convertedPrice.value
+            : (fare.price && fare.price.currency === 'USD' ? fare.price.value : null)).filter(v => typeof v === 'number');
+          if (prices.length) { tollTotal += Math.min(...prices); tollPriced = true; }
+        }
+      }
+      return {
+        trip: { summary: { length: meters / 1609.344, time: seconds, has_toll: hasToll, has_ferry: hasFerry }, legs: [{ maneuvers }] },
+        path, tollCost: tollPriced ? tollTotal : null
+      };
+    }
+
+    // Collects the routes to compare, the same way the free router's candidates are collected.
+    async function hereRouteCandidates(start, end, truck, prefs) {
+      const found = [];
+      const [main, short] = await Promise.allSettled([
+        requestHereRoutes(start, end, truck, prefs, { alternatives: 2 }),
+        requestHereRoutes(start, end, truck, prefs, { short: true })
+      ]);
+      if (main.status === 'rejected') throw main.reason;
+      main.value.forEach((candidate, k) => found.push({ ...candidate, origin: [], source: k === 0 ? 'main' : 'alt' }));
+      if (short.status === 'fulfilled') found.push({ ...short.value[0], origin: [], source: 'short' });
+      // If a route uses a toll road or ferry and you allow them, also ask for one that avoids it.
+      const extras = [];
+      if (found.some(f => f.trip.summary.has_toll) && prefs.tolls !== 'avoid') extras.push(['No tolls', { avoidTolls: true }]);
+      if (found.some(f => f.trip.summary.has_ferry) && prefs.ferries !== 'avoid') extras.push(['No ferries', { avoidFerries: true }]);
+      const more = await Promise.allSettled(extras.map(([label, options]) => requestHereRoutes(start, end, truck, prefs, options)));
+      more.forEach((result, k) => { if (result.status === 'fulfilled') found.push({ ...result.value[0], origin: [extras[k][0]], source: 'extra' }); });
+      return found;
+    }
+
     // ----- The Truck tab controls -----
     function refreshHereUi() {
       document.getElementById('useHere').checked = hereOn();
+      document.getElementById('useHereRouting').checked = hereRoutingOn();
+      document.getElementById('useHereTolls').checked = hereTollsOn();
       document.getElementById('hereStatus').textContent = hereKey()
         ? (hereOn() ? '✅ A key is saved on this device. HERE is on.' : 'A key is saved, but HERE is switched off.')
         : 'No key saved. The free services are being used.';
@@ -2121,11 +2261,21 @@
       document.getElementById('hereKeyBox').value = '';
       refreshHereUi();
     };
+    document.getElementById('useHereRouting').onchange = (event) => { try { localStorage.setItem('hereRouting', event.target.checked ? '1' : '0'); } catch (e) { } };
+    document.getElementById('useHereTolls').onchange = (event) => { try { localStorage.setItem('hereTolls', event.target.checked ? '1' : '0'); } catch (e) { } };
     document.getElementById('useHere').onchange = (event) => {
       try { localStorage.setItem('useHere', event.target.checked ? '1' : '0'); } catch (e) { }
       refreshHereUi();
     };
-    // "Test" checks the two things the app uses: address search, and searching along a route.
+    // Your truck's size, as typed in the Truck tab.
+    function truckFromBoxes() {
+      return {
+        heightFt: Number(document.getElementById('heightBox').value), weightLbs: Number(document.getElementById('weightBox').value),
+        lengthFt: Number(document.getElementById('lengthBox').value), widthFt: Number(document.getElementById('widthBox').value),
+        hazmat: document.getElementById('hazmatBox').checked, mpg: Number(document.getElementById('mpgBox').value)
+      };
+    }
+    // "Test" checks the three things the app uses: address search, searching along a route, and truck routing.
     document.getElementById('hereTest').onclick = async () => {
       const status = document.getElementById('hereStatus');
       if (!hereKey()) { status.textContent = 'Save a key first.'; return; }
@@ -2136,9 +2286,17 @@
         let text = place ? '✅ Address search works (found ' + (place.address.label || 'Memphis').replace(/, United States$/, '') + '). ' : 'Address search answered but found nothing. ';
         status.textContent = text + 'Checking stops along a route...';
         const stops = await askHereSection([[35.1495, -90.049], [35.3, -89.6], [35.6145, -88.8139]]);
-        status.textContent = stops.length
-          ? text + '✅ Stops along a route work (' + stops.length + ' found on a test route near Memphis).'
-          : text + '⚠️ Stops along a route found 0 places on a test route near Memphis. Press Diagnose to see why.';
+        text += stops.length
+          ? '✅ Stops along a route work (' + stops.length + ' found on a test route near Memphis). '
+          : '⚠️ Stops along a route found 0 places on a test route near Memphis. Press Diagnose to see why. ';
+        status.textContent = text + 'Checking truck routing...';
+        try {
+          const trip = (await requestHereRoutes({ lat: 35.1495, lon: -90.049 }, { lat: 35.6145, lon: -88.8139 }, truckFromBoxes(), readRoutePrefs(), {}))[0].trip;
+          text += '✅ Truck routing works (Memphis to Jackson, TN: ' + trip.summary.length.toFixed(0) + ' mi, ' + formatDuration(trip.summary.time) + ', ' + trip.legs[0].maneuvers.length + ' steps).';
+        } catch (routingProblem) {
+          text += '⚠️ Truck routing did not work: ' + routingProblem.message;
+        }
+        status.textContent = text;
       } catch (error) {
         status.textContent = '❌ ' + error.message;
       }
@@ -2160,7 +2318,7 @@
         ['E. all stop categories (exact ids) along the route', { at: center, route: route + ';w=2400', categories: HERE_CATEGORIES, limit: '5' }],
         ['F. gas stations along the route, strip 5 km', { at: center, route: route + ';w=5000', categories: '700-7600-0116', limit: '5' }]
       ];
-      let report = 'Diagnosing (6 requests)...';
+      let report = 'Diagnosing (6 stop searches + 2 truck routes)...';
       status.textContent = report;
       report = '';
       for (const [name, params] of tries) {
@@ -2169,6 +2327,20 @@
           const items = data.items || [];
           const sample = items.slice(0, 3).map(item => item.title + ' [' + (item.categories || []).map(c => c.id).join(' ') + ']').join('; ');
           report += name + ': ' + items.length + ' found' + (sample ? ' - ' + sample : '') + '\n';
+        } catch (error) {
+          report += name + ': ❌ ' + error.message + '\n';
+        }
+        status.textContent = report + '...';
+      }
+      // Truck routing: Memphis to Nashville, once as asked, once avoiding toll roads.
+      for (const [name, options] of [['G. truck route Memphis to Nashville', {}], ['H. same, avoiding toll roads', { avoidTolls: true }]]) {
+        try {
+          const candidates = await requestHereRoutes({ lat: 35.1495, lon: -90.049 }, { lat: 36.1627, lon: -86.7816 }, truckFromBoxes(), readRoutePrefs(), options);
+          const trip = candidates[0].trip, sections = candidates.raw.routes[0].sections || [];
+          const notices = sections.flatMap(s => s.notices || []).filter(n => n.severity === 'critical').length;
+          report += name + ': ' + trip.summary.length.toFixed(0) + ' mi, ' + formatDuration(trip.summary.time) + ', ' + sections.length + ' section(s), ' +
+                    trip.legs[0].maneuvers.length + ' steps, tolls: ' + (trip.summary.has_toll ? 'yes' + (candidates[0].tollCost != null ? ' ($' + candidates[0].tollCost.toFixed(2) + ')' : ' (no price)') : 'none') +
+                    ', critical warnings: ' + notices + '\n';
         } catch (error) {
           report += name + ': ❌ ' + error.message + '\n';
         }
