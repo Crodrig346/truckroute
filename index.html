@@ -87,16 +87,30 @@
     #choices { display: none; margin: 8px -12px -12px; border-top: 1px solid var(--line); max-height: 38vh; overflow-y: auto; border-radius: 0 0 18px 18px; }
     .choice { padding: 12px 16px; border-bottom: 1px solid var(--line); font-size: 15px; cursor: pointer; }
 
-    /* The slide-up panel at the bottom ("sheet"). Tap or drag its handle to make it taller or shorter. */
-    #sheet { position: absolute; z-index: 1100; left: 0; right: 0; bottom: 0; height: var(--sheet-h); background: var(--card);
-             border-radius: 22px 22px 0 0; box-shadow: 0 -6px 24px rgba(15, 23, 42, .22); display: flex; flex-direction: column;
-             transition: height .25s ease; padding-bottom: env(safe-area-inset-bottom); }
-    body { --sheet-h: var(--sheet-peek); }
-    body[data-sheet="half"] { --sheet-h: var(--sheet-half); }
-    body[data-sheet="full"] { --sheet-h: var(--sheet-full); }
-    #handle { flex: none; height: 26px; display: flex; align-items: center; justify-content: center; cursor: grab; touch-action: none; }
-    #handle span { width: 44px; height: 5px; border-radius: 3px; background: var(--line); }
-    #summary { flex: none; padding: 0 16px 8px; max-height: 170px; overflow-y: auto; }
+    /* The summary card floats above the dock (phones). "--sheet-h" = how much of the bottom of the map is covered
+       (dock + card); a little script keeps it up to date so the map buttons sit just above it. */
+    body { --dock-h: calc(60px + env(safe-area-inset-bottom)); --sheet-h: var(--dock-h); }
+    #sheet { position: absolute; z-index: 1100; left: 10px; right: 10px; bottom: calc(var(--dock-h) + 10px); background: var(--card);
+             border-radius: 18px; box-shadow: var(--shadow); max-height: 38vh; overflow-y: auto; }
+    #sheet:not(:has(#message:not(:empty), #routeOptions.show, #fuelLine:not(:empty), #warnLine:not(:empty))) { display: none; }
+    #summary { padding: 12px 16px 10px; }
+
+    /* The dock: five icons along the bottom of the screen */
+    #dock { position: absolute; z-index: 1150; left: 0; right: 0; bottom: 0; display: grid; grid-template-columns: repeat(5, 1fr);
+            background: var(--card); border-top: 1px solid var(--line); box-shadow: 0 -4px 18px rgba(15, 23, 42, .16);
+            padding-bottom: env(safe-area-inset-bottom); }
+    /* The full-page menu */
+    #page { display: none; position: absolute; z-index: 1160; left: 0; right: 0; top: 0; bottom: var(--dock-h); background: var(--bg);
+            flex-direction: column; padding-top: env(safe-area-inset-top); }
+    body[data-page="open"] #page { display: flex; }
+    #pageHead { flex: none; display: flex; align-items: center; gap: 6px; padding: 8px 8px 8px 6px; background: var(--card); border-bottom: 1px solid var(--line); }
+    #pageHead h2 { flex: 1; margin: 0; text-align: center; font-size: 19px; }
+    #pageBack, #pageClose { border: 0; background: transparent; color: var(--accent); font-size: 17px; font-weight: 700; height: 44px; min-width: 64px; border-radius: 10px; }
+    #pageClose { color: var(--muted); font-size: 20px; min-width: 52px; }
+    #pageBack:active, #pageClose:active { background: var(--line); }
+    @media (max-width: 899px) {
+      body[data-page="open"] #search, body[data-page="open"] #navButton, body[data-page="open"] #sheet { display: none !important; }
+    }
     #message { font-size: 15px; font-weight: 600; }
     #message:empty { display: none; }      /* nothing to say = no empty gap */
     #fuelLine { font-size: 13px; color: var(--muted); margin-top: 2px; }
@@ -112,12 +126,12 @@
     .routeCard small { margin-top: 0; font-size: 12px; }
 
     /* The tab bar */
-    #tabs { flex: none; display: grid; grid-template-columns: repeat(5, 1fr); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
-    #tabs button { border: 0; background: transparent; padding: 7px 2px 6px; display: flex; flex-direction: column; align-items: center; gap: 1px;
+    /* dock buttons */
+    #dock button { border: 0; background: transparent; padding: 7px 2px 6px; display: flex; flex-direction: column; align-items: center; gap: 1px;
                    color: var(--muted); border-bottom: 3px solid transparent; }
-    #tabs .ico { font-size: 19px; line-height: 1.1; }
-    #tabs .lbl { font-size: 11px; font-weight: 700; }
-    #tabs button.active { color: var(--text); border-bottom-color: var(--accent); }
+    #dock .ico { font-size: 19px; line-height: 1.1; }
+    #dock .lbl { font-size: 11px; font-weight: 700; }
+    #dock button.active { color: var(--text); border-bottom-color: var(--accent); }
 
     /* The content area under the tabs: one "pane" shows at a time */
     #panes { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
@@ -197,9 +211,9 @@
     /* ---------- Icons ---------- */
     .ic { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; vertical-align: middle; }
     .ic.fill { fill: currentColor; stroke: none; }
-    #tabs .ico { display: flex; }
-    #tabs .ico .ic { width: 23px; height: 23px; }
-    #tabs button.active .ico .ic { stroke: var(--accent); }
+    #dock .ico { display: flex; }
+    #dock .ico .ic { width: 23px; height: 23px; }
+    #dock button.active .ico .ic { stroke: var(--accent); }
     .iconBtn .ic { width: 21px; height: 21px; color: var(--muted); }
     #brand { display: flex; align-items: center; gap: 8px; }
     #brand .logo { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 9px; background: var(--accent); color: var(--accent-ink); }
@@ -225,20 +239,18 @@
 
     /* Phones: the map's own zoom buttons are hidden (you pinch instead) and its credit line sits above the panel */
     @media (max-width: 899px) {
-      body[data-sheet="full"] #search { display: none; }      /* with the panel fully open, the search card steps aside */
       .leaflet-control-zoom { display: none; }
       .leaflet-bottom { bottom: var(--sheet-h); transition: bottom .25s ease; }
     }
     /* Computers and tablets: a permanent side panel on the left, the map on the right */
     @media (min-width: 900px) {
-      #app { display: grid; grid-template-columns: 430px 1fr; grid-template-rows: auto 1fr; }
-      #map { position: relative; grid-column: 2; grid-row: 1 / span 2; }
+      #app { display: grid; grid-template-columns: 430px 1fr; grid-template-rows: auto auto auto 1fr; }
+      #map { position: relative; grid-column: 2; grid-row: 1 / span 4; }
       #search { position: relative; inset: auto; grid-column: 1; grid-row: 1; margin: 12px; }
-      #sheet { position: relative; grid-column: 1; grid-row: 2; height: auto; min-height: 0; border-radius: 0; box-shadow: none;
-               border-top: 1px solid var(--line); transition: none; }
-      #handle { display: none; }
-      #sheet { padding-top: 10px; }
-      #summary { max-height: none; }
+      #sheet { position: relative; inset: auto; grid-column: 1; grid-row: 2; margin: 0 12px 10px; max-height: 40vh; }
+      #dock { position: relative; inset: auto; grid-column: 1; grid-row: 3; box-shadow: none; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+      #page { display: flex !important; position: relative; inset: auto; grid-column: 1; grid-row: 4; min-height: 0; padding-top: 0; background: var(--card); }
+      #pageHead { display: none; }
       #search.compact #brandRow { display: flex; }
       #navBar { left: 442px; }
       #stopFab { bottom: 16px; }
@@ -247,7 +259,7 @@
     }
   </style>
 </head>
-<body data-sheet="peek">
+<body>
   <!-- The icon set: simple line drawings (24 x 24) that every button, tab and map pin draws from. They take the
        color of the text around them, so they work in light and dark mode. -->
   <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
@@ -309,23 +321,32 @@
       <span>GO</span>
     </button>
 
-    <!-- The slide-up panel -->
+    <!-- The summary card: messages, route choices, fuel and warnings. It floats above the dock and hides when empty. -->
     <div id="sheet">
-      <div id="handle" role="button" aria-label="Make the panel taller or shorter"><span></span></div>
       <div id="summary">
         <div id="message"></div>
         <div id="routeOptions"></div>
         <div id="fuelLine"></div>
         <div id="warnLine"></div>
       </div>
-      <nav id="tabs">
-        <button id="tabTruck"><span class="ico"><svg class="ic"><use href="#i-truck"/></svg></span><span class="lbl">Truck</span></button>
-        <button id="tabStops" class="active"><span class="ico"><svg class="ic"><use href="#i-fuel"/></svg></span><span class="lbl">Stops</span></button>
-        <button id="tabRoute"><span class="ico"><svg class="ic"><use href="#i-route"/></svg></span><span class="lbl">Route</span></button>
-        <button id="tabFavs"><span class="ico"><svg class="ic"><use href="#i-star"/></svg></span><span class="lbl">Favs<span id="favCount"></span></span></button>
-        <button id="tabTrips"><span class="ico"><svg class="ic"><use href="#i-bookmark"/></svg></span><span class="lbl">Trips<span id="tripCount"></span></span></button>
-      </nav>
+    </div>
 
+    <!-- The dock: five icons along the bottom. Tap one to open its full-page menu. -->
+    <nav id="dock">
+      <button id="tabTruck"><span class="ico"><svg class="ic"><use href="#i-truck"/></svg></span><span class="lbl">Truck</span></button>
+      <button id="tabStops"><span class="ico"><svg class="ic"><use href="#i-fuel"/></svg></span><span class="lbl">Stops</span></button>
+      <button id="tabRoute"><span class="ico"><svg class="ic"><use href="#i-route"/></svg></span><span class="lbl">Route</span></button>
+      <button id="tabFavs"><span class="ico"><svg class="ic"><use href="#i-star"/></svg></span><span class="lbl">Favs<span id="favCount"></span></span></button>
+      <button id="tabTrips"><span class="ico"><svg class="ic"><use href="#i-bookmark"/></svg></span><span class="lbl">Trips<span id="tripCount"></span></span></button>
+    </nav>
+
+    <!-- The full-page menus. On a phone this covers the map until you go back; on a computer it is the side panel. -->
+    <div id="page">
+      <div id="pageHead">
+        <button id="pageBack" aria-label="Back to the map">‹ Map</button>
+        <h2 id="pageTitle">Stops</h2>
+        <button id="pageClose" aria-label="Close this menu">✕</button>
+      </div>
       <div id="panes">
         <div id="stops">
           <div id="stopTools">
@@ -1403,20 +1424,48 @@
     }
     renderFavorites();
 
-    // Switch between the six tabs at the bottom (Stops, Plan, Drive, Favs, Trips, Truck).
-    function showTab(which) {
-      for (const [name, tabId] of [['settings', 'tabTruck'], ['stops', 'tabStops'], ['route', 'tabRoute'], ['favs', 'tabFavs'], ['trips', 'tabTrips']]) {
+    // The dock at the bottom: Truck, Stops, Route, Favs, Trips. On a phone each icon opens its menu as a FULL PAGE over the map;
+    // tap the same icon again, "‹ Map" or ✕ to go back to the map. On a computer the menu is the side panel and is always shown.
+    const PAGE_TITLES = { stops: 'Stops', route: 'Route', favs: 'Favorites', trips: 'Saved trips', settings: 'Truck & settings' };
+    const PAGE_TABS = { settings: 'tabTruck', stops: 'tabStops', route: 'tabRoute', favs: 'tabFavs', trips: 'tabTrips' };
+    let currentPage = 'stops';
+    const isPhone = () => window.innerWidth < 900;
+    function selectPage(which) {                       // choose WHICH menu is showing (without opening it)
+      currentPage = which;
+      for (const [name, tabId] of Object.entries(PAGE_TABS)) {
         document.getElementById(name).style.display = which === name ? 'block' : 'none';
         document.getElementById(tabId).className = which === name ? 'active' : '';
       }
+      document.getElementById('pageTitle').textContent = PAGE_TITLES[which] || '';
       document.getElementById('panes').scrollTop = 0;
-      if (getSheet() === 'peek') setSheet('half');    // pressing a tab opens the panel if it was folded down
     }
-    document.getElementById('tabStops').onclick = () => showTab('stops');
-    document.getElementById('tabRoute').onclick = () => showTab('route');
-    document.getElementById('tabFavs').onclick = () => showTab('favs');
-    document.getElementById('tabTrips').onclick = () => showTab('trips');
-    document.getElementById('tabTruck').onclick = () => showTab('settings');
+    function closePage() {
+      delete document.body.dataset.page;
+      if (isPhone()) for (const tabId of Object.values(PAGE_TABS)) document.getElementById(tabId).className = '';
+    }
+    function showTab(which) {
+      if (isPhone() && document.body.dataset.page === 'open' && currentPage === which) { closePage(); return; }
+      selectPage(which);
+      document.body.dataset.page = 'open';
+    }
+    document.getElementById('pageBack').onclick = closePage;
+    document.getElementById('pageClose').onclick = closePage;
+    for (const [name, tabId] of Object.entries(PAGE_TABS)) document.getElementById(tabId).onclick = () => showTab(name);
+    selectPage('stops');
+    if (isPhone()) closePage();                        // start on the map
+    // Keep "--sheet-h" (how much of the map's bottom is covered by the dock and summary card) up to date, so the GO arrow,
+    // the stop button and the map credit line sit just above them.
+    {
+      const sync = () => {
+        const dock = document.getElementById('dock'), card = document.getElementById('sheet');
+        const cardH = getComputedStyle(card).display === 'none' ? 0 : card.offsetHeight + 10;
+        document.body.style.setProperty('--sheet-h', (dock.offsetHeight + cardH) + 'px');
+      };
+      new ResizeObserver(sync).observe(document.getElementById('sheet'));
+      new ResizeObserver(sync).observe(document.getElementById('dock'));
+      window.addEventListener('resize', sync);
+      sync();
+    }
 
     // ---------- STEP 6a: places we already know exactly ----------
     // Normally we turn what you type into a map location by searching. But some places we already know to
@@ -2057,7 +2106,20 @@
     const HERE_FREE_PER_MONTH = 5000;
     function hereKey() { try { return localStorage.getItem('hereKey') || ''; } catch (e) { return ''; } }
     function hereOn() { try { return localStorage.getItem('useHere') !== '0'; } catch (e) { return true; } }
-    function hereReady() { return !!hereKey() && hereOn(); }
+    // The TruckRoute key server (Cloudflare) holds the real HERE key, so drivers need no key. Its web address goes here
+    // once it is deployed. (For testing, the address can also be put in this browser's storage under "serverUrl".)
+    const KEY_SERVER = '';
+    function serverUrl() { try { return (localStorage.getItem('serverUrl') || KEY_SERVER).replace(/\/+$/, ''); } catch (e) { return KEY_SERVER; } }
+    // A random code made up by this device. The server only uses it to count requests per device: it is not a name or an account.
+    function deviceId() {
+      try {
+        let id = localStorage.getItem('deviceId');
+        if (!id) { id = Array.from(crypto.getRandomValues(new Uint8Array(18)), b => b.toString(16).padStart(2, '0')).join(''); localStorage.setItem('deviceId', id); }
+        return id;
+      } catch (e) { return 'no-storage-device-' + Math.random().toString(16).slice(2, 12); }
+    }
+    // A key pasted on this device (developer option) is used directly; otherwise the key server is used.
+    function hereReady() { return (!!hereKey() || !!serverUrl()) && hereOn(); }
 
     // Count this device's HERE requests per month, so you can watch the free allowance (5,000 for search and truck routing).
     function hereMonthUsage() {
@@ -2080,14 +2142,30 @@
     // One function sends every request to HERE, so errors are handled in one place. Error messages never include the key.
     async function hereFetch(base, params, signal) {
       const key = hereKey();
-      if (!key) throw new Error('No HERE key is saved on this device.');
-      const url = base + '?' + new URLSearchParams({ ...params, apiKey: key }).toString();
+      const viaServer = !key && !!serverUrl();
+      if (!key && !viaServer) throw new Error('No HERE key is saved on this device.');
+      let url, options = { signal };
+      if (viaServer) {
+        // Ask the key server instead of HERE. It adds the secret key and passes the answer back unchanged.
+        const service = new URL(base).hostname.split('.')[0].replace('router', 'routes');
+        url = serverUrl() + '/api/here/' + service + '?' + new URLSearchParams(params).toString();
+        options.headers = { 'X-Device-Id': deviceId() };
+      } else {
+        url = base + '?' + new URLSearchParams({ ...params, apiKey: key }).toString();
+      }
       hereBump();
       let response;
-      try { response = await fetch(url, { signal }); }
+      try { response = await fetch(url, options); }
       catch (error) {
         if (error.name === 'AbortError') throw error;
-        throw new Error('Could not reach HERE (no internet, or this website is not in your Trusted domains yet).');
+        throw new Error(viaServer ? 'Could not reach the TruckRoute server (no internet, or it is down).' : 'Could not reach HERE (no internet, or this website is not in your Trusted domains yet).');
+      }
+      if (viaServer && !response.ok) {
+        let code = '';
+        try { code = (await response.clone().json()).error || ''; } catch (e) { }
+        if (response.status === 429) throw new Error('The map service is busy right now (' + (code || 'too many requests') + '). Try again in a moment.');
+        if (response.status === 503) throw new Error('The map service is paused for maintenance.');
+        if (response.status >= 400 && response.status < 500 && code && response.status !== 401 && response.status !== 403) throw new Error('The TruckRoute server refused that request (' + code + ').');
       }
       // HERE usually explains a problem in its reply. We pass that explanation along (it never contains the key).
       let explanation = '';
@@ -2317,7 +2395,9 @@
       document.getElementById('useHereTolls').checked = hereTollsOn();
       document.getElementById('hereStatus').textContent = hereKey()
         ? (hereOn() ? '✅ A key is saved on this device. HERE is on.' : 'A key is saved, but HERE is switched off.')
-        : 'No key saved. The free services are being used.';
+        : serverUrl()
+          ? (hereOn() ? '✅ Connected to the TruckRoute map server. HERE is on (no key needed).' : 'Connected to the TruckRoute server, but HERE is switched off.')
+          : 'No key saved. The free services are being used.';
       showHereUsage();
     }
     document.getElementById('hereSave').onclick = () => {
@@ -2349,7 +2429,7 @@
     // "Test" checks the three things the app uses: address search, searching along a route, and truck routing.
     document.getElementById('hereTest').onclick = async () => {
       const status = document.getElementById('hereStatus');
-      if (!hereKey()) { status.textContent = 'Save a key first.'; return; }
+      if (!hereKey() && !serverUrl()) { status.textContent = 'Save a key first.'; return; }
       status.textContent = 'Testing...';
       try {
         const geo = await hereFetch('https://geocode.search.hereapi.com/v1/geocode', { q: 'Memphis, TN', in: 'countryCode:USA', limit: '1' });
@@ -2377,7 +2457,7 @@
     // It shows counts and the category ids HERE uses, never the key.
     document.getElementById('hereDiag').onclick = async () => {
       const status = document.getElementById('hereStatus');
-      if (!hereKey()) { status.textContent = 'Save a key first.'; return; }
+      if (!hereKey() && !serverUrl()) { status.textContent = 'Save a key first.'; return; }
       const center = '35.1495,-90.049';
       const strip = [[35.1495, -90.049], [35.3, -89.6], [35.6145, -88.8139]];
       const route = encodeFlexPolyline(strip);
@@ -2423,24 +2503,10 @@
     refreshHereUi();
 
     // ---------- STEP 8: the new look ----------
-    // The bottom panel ("sheet") has three heights: peek (just the summary and tabs), half, and full.
-    // Tap its handle to cycle through them, or drag the handle up or down.
-    const SHEETS = ['peek', 'half', 'full'];
-    function getSheet() { return document.body.dataset.sheet || 'peek'; }
-    function setSheet(state) { document.body.dataset.sheet = state; }
-    {
-      const handle = document.getElementById('handle');
-      let startY = null;
-      handle.addEventListener('pointerdown', (event) => { startY = event.clientY; handle.setPointerCapture(event.pointerId); });
-      handle.addEventListener('pointerup', (event) => {
-        if (startY === null) return;
-        const moved = event.clientY - startY, i = SHEETS.indexOf(getSheet());
-        startY = null;
-        if (Math.abs(moved) < 8) setSheet(SHEETS[(i + 1) % SHEETS.length]);            // a tap: next height
-        else if (moved < 0) setSheet(SHEETS[Math.min(SHEETS.length - 1, i + 1)]);       // dragged up: taller
-        else setSheet(SHEETS[Math.max(0, i - 1)]);                                      // dragged down: shorter
-      });
-    }
+    // The old three-height bottom panel is gone: the dock opens full-page menus. These two small functions keep the older
+    // code working: "peek" now means "back to the map".
+    function getSheet() { return document.body.dataset.page === 'open' ? 'full' : 'peek'; }
+    function setSheet(state) { if (state === 'peek' && isPhone()) closePage(); }
     // When you tap into an address box to start a new search, the folded-down search card opens up again.
     document.getElementById('search').addEventListener('focusin', () => document.getElementById('search').classList.remove('compact'));
 
