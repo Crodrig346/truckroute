@@ -69,6 +69,10 @@
     #installButton, .themeToggle { border: 0; border-radius: 999px; padding: 6px 12px; font-size: 14px; font-weight: 700; background: var(--field); }
     #installButton { background: var(--accent); color: var(--accent-ink); }
     .field { display: flex; align-items: center; gap: 6px; background: var(--field); border-radius: 12px; padding: 0 4px 0 12px; margin-bottom: 8px; height: 46px; }
+    #fromLine { display: flex; align-items: center; gap: 8px; margin: -2px 2px 10px 14px; font-size: 14px; color: var(--muted, #8a93a3); }
+    #fromLine b { color: inherit; font-weight: 700; }
+    #fromLine button { border: 0; background: transparent; color: var(--accent); font-weight: 700; font-size: 14px; padding: 6px 8px; margin-left: auto; }
+    #fromLine[hidden], #startField[hidden] { display: none !important; }
     .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
     .dotStart { border: 3px solid #3b82f6; background: var(--card); }
     .dotEnd { background: #ef4444; }
@@ -279,15 +283,16 @@
         </span>
       </div>
       <div class="field">
-        <span class="dot dotStart"></span>
-        <input id="startBox" placeholder="Start address or place" autocomplete="off">
-        <button id="startSearch" class="iconBtn" title="Show matching addresses" aria-label="Search for the start address"><svg class="ic"><use href="#i-search"/></svg></button>
-        <button id="meButton" class="iconBtn" title="Use my current location" aria-label="Use my current location"><svg class="ic"><use href="#i-locate"/></svg></button>
-      </div>
-      <div class="field">
         <span class="dot dotEnd"></span>
         <input id="endBox" placeholder="Where to? Address or place" autocomplete="off">
         <button id="endSearch" class="iconBtn" title="Show matching addresses" aria-label="Search for the destination address"><svg class="ic"><use href="#i-search"/></svg></button>
+      </div>
+      <div id="fromLine"><span class="dot dotStart"></span><span>From <b>My location</b></span><button id="fromChange" type="button">Change</button></div>
+      <div class="field" id="startField" hidden>
+        <span class="dot dotStart"></span>
+        <input id="startBox" placeholder="Start address or place" autocomplete="off">
+        <button id="startSearch" class="iconBtn" title="Show matching addresses" aria-label="Search for the start address"><svg class="ic"><use href="#i-search"/></svg></button>
+        <button id="meButton" class="iconBtn" title="Use my current location instead" aria-label="Use my current location instead"><svg class="ic"><use href="#i-locate"/></svg></button>
       </div>
       <button id="goButton">Find route</button>
       <div id="choices"></div>
@@ -307,7 +312,7 @@
     <div id="sheet">
       <div id="handle" role="button" aria-label="Make the panel taller or shorter"><span></span></div>
       <div id="summary">
-        <div id="message">Type a start and a destination, then press Find route.</div>
+        <div id="message">Type where you want to go, then press Find route. (Trips start from your location unless you tap Change.)</div>
         <div id="routeOptions"></div>
         <div id="fuelLine"></div>
         <div id="warnLine"></div>
@@ -1584,13 +1589,41 @@
       L.popup().setLatLng(event.latlng).setContent(box).openOn(map);
     });
     // The 📍 button: put your current GPS position in the Start box.
-    document.getElementById('meButton').onclick = () => {
-      if (!navigator.geolocation) { say('This device has no GPS access.'); return; }
+    // The trip starts from where you are, unless you tap "Change" and type another start address.
+    function showStartField() {
+      document.getElementById('startField').hidden = false;
+      document.getElementById('fromLine').hidden = true;
+      const box = document.getElementById('startBox');
+      if (box.value === 'My location') box.value = '';
+      box.focus();
+    }
+    function useMyLocationAsStart() {
+      document.getElementById('startBox').value = 'My location';
+      document.getElementById('startField').hidden = true;
+      document.getElementById('fromLine').hidden = false;
+      if (previewMarkers.start) { previewLayer.removeLayer(previewMarkers.start); previewMarkers.start = null; }
+    }
+    // Keeps the card in step with the start box (it can be filled by a saved trip, a dropped pin, and so on).
+    function syncStartUI() {
+      const text = document.getElementById('startBox').value.trim();
+      if (!text || text === 'My location') useMyLocationAsStart(); else { document.getElementById('startField').hidden = false; document.getElementById('fromLine').hidden = true; }
+    }
+    // Asks the phone for its GPS position (and remembers it as "My location").
+    function refreshMyLocation() {
+      return new Promise((resolve, reject) => {
+        if (!navigator.geolocation) { reject(new Error('This device has no GPS access.')); return; }
+        navigator.geolocation.getCurrentPosition(
+          p => { knownPlaces['My location'] = { lat: p.coords.latitude, lon: p.coords.longitude, radius: 100, t: Date.now() }; resolve(knownPlaces['My location']); },
+          e => reject(new Error(e.message || 'location is blocked')),
+          { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 });
+      });
+    }
+    document.getElementById('fromChange').onclick = showStartField;
+    document.getElementById('startBox').addEventListener('blur', () => { setTimeout(() => { if (!document.getElementById('startBox').value.trim() && document.activeElement !== document.getElementById('startBox')) useMyLocationAsStart(); }, 250); });
+    document.getElementById('meButton').onclick = async () => {
       say('Finding your location...');
-      navigator.geolocation.getCurrentPosition(
-        p => { knownPlaces['My location'] = { lat: p.coords.latitude, lon: p.coords.longitude, radius: 100 };
-               document.getElementById('startBox').value = 'My location'; say('Start set to your current location.'); },
-        e => say('Could not get your location: ' + e.message));
+      try { await refreshMyLocation(); useMyLocationAsStart(); say('Start set to your current location.'); }
+      catch (e) { say('Could not get your location: ' + e.message); }
     };
 
     // ---------- STEP 6b: turn-by-turn directions, live navigation and voice ----------
@@ -1694,7 +1727,7 @@
       speak('You are off route. Recalculating.');
       document.getElementById('navBar').style.display = 'block';
       document.getElementById('navBar').textContent = '↻ Off route - recalculating...';
-      knownPlaces['My location'] = { lat, lon, radius: 100 };
+      knownPlaces['My location'] = { lat, lon, radius: 100, t: Date.now() };
       document.getElementById('startBox').value = 'My location';
       document.getElementById('goButton').click();
     }
@@ -1777,6 +1810,7 @@
           knownPlaces[t.startText] = t.start; knownPlaces[t.endText] = t.end;
           document.getElementById('startBox').value = t.startText;
           document.getElementById('endBox').value = t.endText;
+          syncStartUI();
           say('Loaded "' + t.name + '". Press Find route.');
         };
         const remove = document.createElement('button');
@@ -1917,9 +1951,20 @@
 
     // ---------- Putting it together: what happens when you press the button ----------
     document.getElementById('goButton').onclick = async function () {
-      const startText = document.getElementById('startBox').value.trim();
+      let startText = document.getElementById('startBox').value.trim();
       const endText = document.getElementById('endBox').value.trim();
-      if (!startText || !endText) { say('Please fill in both boxes.'); return; }
+      if (!endText) { say('Type where you want to go first.'); return; }
+      // No start typed = start from where you are right now.
+      if (!startText || startText === 'My location') {
+        const known = knownPlaces['My location'];
+        if (!known || !known.t || Date.now() - known.t > 30000) {
+          say('Finding your location...');
+          try { await refreshMyLocation(); }
+          catch (e) { say('Could not get your location (' + e.message + '). Tap "Change" and type a start address, or allow location for this app.'); showStartField(); return; }
+        }
+        startText = 'My location';
+        document.getElementById('startBox').value = startText;
+      }
 
       try {
         say('Looking up your places...');
