@@ -98,6 +98,7 @@
     #handle span { width: 44px; height: 5px; border-radius: 3px; background: var(--line); }
     #summary { flex: none; padding: 0 16px 8px; max-height: 170px; overflow-y: auto; }
     #message { font-size: 15px; font-weight: 600; }
+    #message:empty { display: none; }      /* nothing to say = no empty gap */
     #fuelLine { font-size: 13px; color: var(--muted); margin-top: 2px; }
     #warnLine { font-size: 13px; font-weight: 700; color: var(--warn); margin-top: 2px; }
     #fuelLine:empty, #warnLine:empty { display: none; }
@@ -312,7 +313,7 @@
     <div id="sheet">
       <div id="handle" role="button" aria-label="Make the panel taller or shorter"><span></span></div>
       <div id="summary">
-        <div id="message">Type where you want to go, then press Find route. (Trips start from your location unless you tap Change.)</div>
+        <div id="message"></div>
         <div id="routeOptions"></div>
         <div id="fuelLine"></div>
         <div id="warnLine"></div>
