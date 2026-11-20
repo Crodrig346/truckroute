@@ -3,7 +3,7 @@
 // so the app opens instantly and even opens with no signal.
 // It does NOT store routes, stops or map pictures - those always come live from the internet.
 
-const CACHE = 'truckroute-v12';   // change this number whenever the app files change, to force an update
+const CACHE = 'truckroute-v13';   // change this number whenever the app files change, to force an update
 const LEAFLET = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/';
 const APP_FILES = ['./', 'index.html', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png',
   // the map library and its little pictures (pins, buttons), saved up front so the app can start with no signal

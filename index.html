@@ -44,6 +44,9 @@
     [data-theme="dark"] .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(.92) contrast(.88); }
     [data-theme="dark"] .leaflet-container { background: #14181f; }
 
+    /* Anything marked "hidden" must really be hidden. (Without this line, a style that sets "display" on an element wins
+       over the hidden mark, and the element stays on screen.) */
+    [hidden] { display: none !important; }
     * { box-sizing: border-box; }
     html, body { height: 100%; margin: 0; }
     body { font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text);
