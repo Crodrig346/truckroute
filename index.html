@@ -468,7 +468,7 @@
     // so we remove them before searching.
     function cleanAddress(text) {
       return text
-        .replace(/[,\s]+(suite|ste|unit|apt|apartment|bldg|building|floor|fl|room|rm|dock|door)\.?\s*#?\s*[\w-]+/gi, '')
+        .replace(/[,\s]+(suite|ste|unit|apt|apartment|bldg|building|floor|fl|room|rm|dock|door)\b\.?\s*#?\s*[\w-]+/gi, '')
         .replace(/\s*#\s*[\w-]+/g, '')
         .replace(/\s{2,}/g, ' ').replace(/\s+,/g, ',').trim();
     }
