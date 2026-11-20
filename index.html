@@ -73,6 +73,11 @@
     #fromLine b { color: inherit; font-weight: 700; }
     #fromLine button { border: 0; background: transparent; color: var(--accent); font-weight: 700; font-size: 14px; padding: 6px 8px; margin-left: auto; }
     #fromLine[hidden], #startField[hidden] { display: none !important; }
+    /* The voice tile on the map (sits under the satellite button) */
+    .voiceTile a { width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; background: var(--card); color: var(--muted); border-radius: 4px; }
+    .voiceTile .ic { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .voiceTile a.on { color: var(--accent-ink); background: var(--accent); }
+    .voiceTile a.on .slash, .voiceTile a:not(.on) .wave { display: none; }
     .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
     .dotStart { border: 3px solid #3b82f6; background: var(--card); }
     .dotEnd { background: #ef4444; }
@@ -430,7 +435,7 @@
           </section>
           <section>
             <h3>Navigation</h3>
-            <label class="check"><input type="checkbox" id="voiceBox" checked> 🔊 Voice guidance while driving</label>
+            <label class="check"><input type="checkbox" id="voiceBox"> 🔊 Voice guidance while driving</label>
           </section>
           <section>
             <h3>Look</h3>
@@ -463,6 +468,39 @@
       L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19 }),
       L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19 })
     ]);
+    // Voice on/off tile. It is added BEFORE the layers button so it sits just below it. Voice is OFF until you turn it on.
+    // (The real switch is the "Voice guidance" box in the Truck tab, which the speak() function reads; this tile and that box stay in step.)
+    const voiceControl = L.control({ position: 'bottomleft' });
+    voiceControl.onAdd = () => {
+      const bar = L.DomUtil.create('div', 'leaflet-bar voiceTile');
+      const button = L.DomUtil.create('a', '', bar);
+      button.id = 'voiceTile'; button.href = '#'; button.setAttribute('role', 'button');
+      button.innerHTML = '<svg class="ic" viewBox="0 0 24 24"><path d="M4 9.5v5h4l5 4v-13l-5 4z"/><path class="wave" d="M16.5 9a4 4 0 0 1 0 6M19 6.5a8 8 0 0 1 0 11"/><path class="slash" d="M17 9l5 6M22 9l-5 6"/></svg>';
+      L.DomEvent.disableClickPropagation(bar);
+      L.DomEvent.on(button, 'click', (event) => {
+        L.DomEvent.preventDefault(event);
+        const box = document.getElementById('voiceBox');
+        box.checked = !box.checked;
+        box.dispatchEvent(new Event('change'));
+      });
+      return bar;
+    };
+    voiceControl.addTo(map);
+    function syncVoiceTile() {
+      const on = document.getElementById('voiceBox').checked;
+      const button = document.getElementById('voiceTile');
+      button.classList.toggle('on', on);
+      button.title = on ? 'Voice guidance is ON (tap to turn off)' : 'Voice guidance is OFF (tap to turn on)';
+      button.setAttribute('aria-label', button.title);
+      if (!on) { try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch (e) { } }   // turning voice off stops any talking
+    }
+    {
+      const box = document.getElementById('voiceBox');
+      let saved = null; try { saved = localStorage.getItem('voiceOn'); } catch (e) { }
+      box.checked = saved === '1';                        // off by default
+      box.addEventListener('change', () => { try { localStorage.setItem('voiceOn', box.checked ? '1' : '0'); } catch (e) { } syncVoiceTile(); });
+      syncVoiceTile();
+    }
     L.control.layers({ 'Street map': streetMap, 'Satellite': satelliteMap }, null, { position: 'bottomleft' }).addTo(map);
     try { if (localStorage.getItem('truckroute-basemap') === 'satellite') { map.removeLayer(streetMap); satelliteMap.addTo(map); } } catch (e) { }
     map.on('baselayerchange', (e) => { try { localStorage.setItem('truckroute-basemap', e.name === 'Satellite' ? 'satellite' : 'street'); } catch (x) { } });
