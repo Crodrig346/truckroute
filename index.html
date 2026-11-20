@@ -60,7 +60,7 @@
 
     /* ---------- The layout: the map fills the screen, other things float on top of it ---------- */
     #app { position: fixed; inset: 0; }
-    #map { position: absolute; inset: 0; z-index: 0; }
+    #map { position: absolute; inset: 0; top: var(--head-h, 0px); z-index: 0; }
 
     /* The search card at the top */
     #search { position: absolute; z-index: 1200; left: 10px; right: 10px; top: calc(10px + env(safe-area-inset-top));
@@ -126,15 +126,14 @@
     #etaDelay.slow { background: var(--bad-bg); color: var(--warn); }
     #etaSwap { font-size: 11px; color: var(--muted); margin-top: 2px; }
     /* Speed limit signs: white rectangle like a real US sign, and a round badge for your own top speed */
-    #speedSigns { display: none; position: absolute; z-index: 1130; left: 10px; top: calc(env(safe-area-inset-top) + 84px); flex-direction: column; gap: 8px; pointer-events: none; }
+    /* The speed limit sign sits at the bottom right of the map, just above the stop button */
+    #speedSigns { display: none; position: absolute; z-index: 1130; right: 12px; bottom: calc(var(--sheet-h) + 88px); flex-direction: column; gap: 8px; pointer-events: none; }
     body.driving #speedSigns { display: flex; }
-    #speedSign, #capSign { text-align: center; line-height: 1; font-family: system-ui, "Segoe UI", Arial, sans-serif; box-shadow: 0 2px 8px rgba(0, 0, 0, .35); }
+    #speedSign { text-align: center; line-height: 1; font-family: system-ui, "Segoe UI", Arial, sans-serif; box-shadow: 0 2px 8px rgba(0, 0, 0, .35); }
     #speedSign { width: 54px; padding: 5px 0 6px; background: #fff; color: #111; border: 2px solid #111; border-radius: 7px; outline: 2px solid #fff; }
-    #speedSign small, #capSign small { display: block; font-size: 8px; font-weight: 800; letter-spacing: .02em; }
+    #speedSign small { display: block; font-size: 8px; font-weight: 800; letter-spacing: .02em; }
     #speedSign b { display: block; font-size: 26px; font-weight: 800; margin-top: 2px; }
-    #capSign { width: 54px; padding: 5px 0 6px; background: #1d4ed8; color: #fff; border-radius: 50%; width: 54px; height: 54px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-    #capSign[hidden], #speedSign[hidden] { display: none; }
-    #capSign b { font-size: 20px; font-weight: 800; }
+    #speedSign[hidden] { display: none; }
     /* The full-page menu */
     #page { display: none; position: absolute; z-index: 1160; left: 0; right: 0; top: 0; bottom: var(--dock-h); background: var(--bg);
             flex-direction: column; padding-top: env(safe-area-inset-top); }
@@ -230,12 +229,21 @@
     .btnRow button#hereSave { background: var(--accent); color: var(--accent-ink); }
     #hereStatus { margin-top: 8px; font-size: 14px; font-weight: 600; white-space: pre-wrap; overflow-wrap: anywhere; }
 
-    /* Driving mode: a big, high-contrast "next turn" card, and everything else gets out of the way */
-    #navBar { display: none; position: absolute; z-index: 1300; left: 10px; right: 10px; top: calc(10px + env(safe-area-inset-top));
-              background: #10131a; color: #fff; border-radius: 18px; padding: 16px 18px; font-size: 24px; font-weight: 800; line-height: 1.25; box-shadow: var(--shadow); }
-    #stopFab { display: none; position: absolute; z-index: 1300; right: 12px; bottom: calc(var(--sheet-h) + 12px);
-               border: 0; border-radius: 999px; background: #dc2626; color: #fff; font-weight: 800; padding: 12px 18px; box-shadow: var(--shadow); }
-    body.driving #stopFab { display: block; }
+    /* Driving mode: a slim header ABOVE the map (city, county, mile), and everything else gets out of the way */
+    #driveHead { display: none; position: absolute; z-index: 1200; top: 0; left: 0; right: 0; background: var(--card);
+                 padding: calc(env(safe-area-inset-top) + 8px) 16px 9px; border-bottom: 1px solid var(--line); box-shadow: 0 3px 12px rgba(15, 23, 42, .12); }
+    body.driving #driveHead { display: block; }
+    #dhCity { font-size: 24px; font-weight: 800; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #dhMeta { font-size: 15px; font-weight: 600; color: var(--muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    /* Short status messages while driving ("Off route", "New route ready", "Waiting for GPS") appear as a small note under the header */
+    #navBar { display: none; position: absolute; z-index: 1300; left: 10px; right: 10px; top: calc(var(--head-h, 0px) + 10px);
+              background: #10131a; color: #fff; border-radius: 14px; padding: 10px 14px; font-size: 16px; font-weight: 700; line-height: 1.25; box-shadow: var(--shadow); }
+    /* The stop-driving button: a round red icon (a white square, like a "stop" button) at the bottom right of the map */
+    #stopFab { display: none; position: absolute; z-index: 1300; right: 12px; bottom: calc(var(--sheet-h) + 22px); width: 54px; height: 54px;
+               border: 0; border-radius: 50%; background: #dc2626; color: #fff; padding: 0; align-items: center; justify-content: center; box-shadow: var(--shadow); }
+    #stopFab svg { width: 22px; height: 22px; fill: currentColor; }
+    #stopFab:active { filter: brightness(.9); }
+    body.driving #stopFab { display: flex; }
     body.driving #search { display: none; }
     body.driving #sheet { display: none !important; }      /* the route options / summary card closes once you start driving */
 
@@ -291,8 +299,10 @@
       #search.compact #brandRow { display: flex; }
       #navBar { left: 442px; }
       #etaBar { left: 430px; bottom: 0; }
-      #speedSigns { left: 442px; top: 84px; }
-      #stopFab { bottom: 16px; }
+      #speedSigns { right: 22px; bottom: 82px; }
+      #map { top: auto; margin-top: var(--head-h, 0px); }
+      #driveHead { left: 430px; padding-top: 8px; }
+      #stopFab { bottom: 16px; right: 22px; }
       #navButton { bottom: 22px; right: 22px; }
       #iosHint { left: 442px; bottom: 12px; }
     }
@@ -353,7 +363,7 @@
     <div id="iosHint">To install on your iPhone: tap the Share button (square with an arrow), then "Add to Home Screen".
       <button id="iosHintClose">Got it</button></div>
     <div id="navBar"></div>
-    <button id="stopFab">■ Stop driving</button>
+    <button id="stopFab" title="Stop driving" aria-label="Stop driving"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2.5"/></svg></button>
     <!-- The navigation arrow: appears on the map once a route is found. Tap it to start driving (GPS + voice). -->
     <button id="navButton" title="Start navigation" aria-label="Start navigation">
       <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2 4.5 20.3l.7.7L12 18l6.8 3 .7-.7z"/></svg>
@@ -379,6 +389,12 @@
       <button id="tabTrips"><span class="ico"><svg class="ic"><use href="#i-bookmark"/></svg></span><span class="lbl">Trips<span id="tripCount"></span></span></button>
     </nav>
 
+    <!-- Driving header: sits above the map (the map shrinks to make room) and shows where you are -->
+    <div id="driveHead">
+      <div id="dhCity">Finding your location...</div>
+      <div id="dhMeta"></div>
+    </div>
+
     <!-- The arrival bar along the bottom of the map. Tap it to switch between "arrive at" and "time left". -->
     <div id="etaBar" role="button" tabindex="0" title="Tap to switch between arrival time and time remaining">
       <div id="etaMain"><span id="etaBig"></span><small id="etaSmall"></small></div>
@@ -388,7 +404,6 @@
     <!-- Speed limit signs, shown while driving (the posted limit from HERE, and your own top speed if you set one) -->
     <div id="speedSigns">
       <div id="speedSign" hidden><small>SPEED<br>LIMIT</small><b id="speedNum"></b></div>
-      <div id="capSign" hidden><small>YOUR<br>TOP</small><b id="capNum"></b></div>
     </div>
 
     <!-- The full-page menus. On a phone this covers the map until you go back; on a computer it is the side panel. -->
@@ -905,10 +920,11 @@
       if (hereReady() && hereRoutingOn()) {
         try {
           const fromHere = buildRouteChoicesFrom(await hereRouteCandidates(start, end, truck, prefs), prefs, truck);
-          routeSourceNote = ' (HERE truck routing)';
+          routeSourceNote = '';       // (it used to say "(HERE truck routing)" here)
           return fromHere;
         } catch (hereProblem) {
-          routeSourceNote = ' HERE routing was not available (' + hereProblem.message + ') so the free router was used.';
+          routeSourceNote = '';       // not shown on screen any more; the reason is kept in the browser's console for troubleshooting
+          try { console.warn('HERE routing was not available, the free router was used: ' + hereProblem.message); } catch (e) { }
         }
       }
       return buildRouteChoicesFrom(await valhallaCandidates(start, end, truck, prefs), prefs, truck);
@@ -1688,6 +1704,12 @@
         document.body.style.setProperty('--eta-h', etaH + 'px');
         document.body.style.setProperty('--sheet-h', (dock.offsetHeight + etaH + cardH) + 'px');
       };
+      // The driving header sits above the map: tell the page how tall it is so the map shrinks to fit, and redraw the map.
+      new ResizeObserver(() => {
+        const head = document.getElementById('driveHead');
+        document.body.style.setProperty('--head-h', (getComputedStyle(head).display === 'none' ? 0 : head.offsetHeight) + 'px');
+        setTimeout(() => map.invalidateSize(), 50);
+      }).observe(document.getElementById('driveHead'));
       new ResizeObserver(sync).observe(document.getElementById('etaBar'));
       new ResizeObserver(sync).observe(document.getElementById('sheet'));
       new ResizeObserver(sync).observe(document.getElementById('dock'));
@@ -1909,7 +1931,7 @@
     // a point on the route line. For live navigation we watch your GPS position, work out where you are on
     // the line, and tell you what's coming next - on screen and out loud.
     let currentRoute = null;         // {path: route points, along: miles at each point, maneuvers: steps}
-    const nav = { active: false, watchId: null, index: 0, spoken: {}, lastReroute: 0, rerouting: false, wakeLock: null, follow: true, last: null, lastFixAt: 0, hiddenAt: 0, startWhenReady: false };
+    const nav = { active: false, watchId: null, index: 0, spoken: {}, lastReroute: 0, rerouting: false, wakeLock: null, follow: true, last: null, lastFixAt: 0, noteAt: 0, arrived: false, hiddenAt: 0, startWhenReady: false };
     let youMarker = null;
 
     function cumulativeMiles(path) {
@@ -1986,9 +2008,11 @@
       const dist = Math.max(0, along[Math.min(m.begin_shape_index, along.length - 1)] - along[index]);
       const isLast = j === maneuvers.length - 1;
 
+      // The top of the screen shows where you are (city, county, mile) instead of the next turn. A short status note
+      // ("Waiting for GPS...", "New route ready") fades after a few seconds. Turns are still spoken, and listed in the Route menu.
       const bar = document.getElementById('navBar');
-      bar.style.display = 'block';
-      bar.textContent = (isLast ? '🏁 ' : '➡ ') + feetOrMiles(dist) + ' - ' + m.instruction;
+      if (bar.style.display === 'block' && !nav.arrived && (firstFix || Date.now() - nav.noteAt > 4000)) bar.style.display = 'none';
+      updateDriveHead(index, lat, lon);
 
       // Highlight the upcoming step in the Directions list.
       document.querySelectorAll('#dirList .item.now').forEach(e => e.classList.remove('now'));
@@ -2000,7 +2024,58 @@
       const longStretch = j > 0 && maneuvers[j - 1].length >= 1.5;
       if (dist <= 1.0 && dist > 0.4 && longStretch && !spoken[j + 'far']) { spoken[j + 'far'] = true; speak('In one mile, ' + lowerFirst(pre)); }
       if (dist <= 0.25 && !spoken[j + 'near']) { spoken[j + 'far'] = spoken[j + 'near'] = true; speak(pre); }
-      if (isLast && dist < 0.03) { speak('You have arrived.'); stopNav(); bar.style.display = 'block'; bar.textContent = '🏁 You have arrived.'; }
+      if (isLast && dist < 0.03) { speak('You have arrived.'); stopNav(); navNote('🏁 You have arrived.'); nav.arrived = true; }
+    }
+
+    // A short status note under the driving header.
+    function navNote(text) {
+      const bar = document.getElementById('navBar');
+      bar.textContent = text; bar.style.display = 'block'; nav.noteAt = Date.now(); nav.arrived = false;
+    }
+
+    // ----- The driving header: city, county and mile -----
+    // "Mile 34 / 88" is the distance driven on this trip out of the trip's total (the map data has no real highway mile markers).
+    // The town and county come from a lookup of where you are. It is repeated only every ~4 miles to keep the number of lookups low.
+    const placeNow = { city: '', state: '', county: '', lat: null, lon: null, busy: false, failedAt: 0 };
+    function countyName(county, state) {
+      if (!county) return '';
+      if (/county|parish|borough|municipio|census area/i.test(county)) return county;
+      return county + (state === 'LA' ? ' Parish' : ' County');
+    }
+    async function lookUpPlace(lat, lon) {
+      placeNow.busy = true;
+      try {
+        let city = '', state = '', county = '';
+        let done = false;
+        if (hereReady()) {
+          try {
+            const data = await hereFetch('https://revgeocode.search.hereapi.com/v1/revgeocode', { at: lat.toFixed(5) + ',' + lon.toFixed(5), lang: 'en-US', limit: '1' });
+            const a = data.items && data.items[0] && data.items[0].address;
+            if (a) { city = a.city || a.district || ''; state = a.stateCode || ''; county = a.county || ''; done = true; }
+          } catch (e) { /* fall back to the free service */ }
+        }
+        if (!done) {
+          const response = await fetch('https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=10&addressdetails=1&lat=' + lat.toFixed(5) + '&lon=' + lon.toFixed(5));
+          if (!response.ok) throw new Error('busy');
+          const a = (await response.json()).address || {};
+          city = a.city || a.town || a.village || a.hamlet || a.municipality || ''; county = a.county || '';
+          state = (a['ISO3166-2-lvl4'] || '').split('-')[1] || a.state || '';
+        }
+        Object.assign(placeNow, { city, state, county, lat, lon, failedAt: 0 });
+      } catch (e) { placeNow.failedAt = Date.now(); }
+      placeNow.busy = false;
+      if (nav.active && nav.last) updateDriveHead(nav.index, nav.last[0], nav.last[1]);
+    }
+    function updateDriveHead(index, lat, lon) {
+      if (!currentRoute) return;
+      const along = currentRoute.along, total = along[along.length - 1] || 0;
+      // time to look up again? (first time, or 4+ miles since the last lookup; after a failure wait a minute)
+      const moved = placeNow.lat == null ? Infinity : miles([lat, lon], [placeNow.lat, placeNow.lon]);
+      if (!placeNow.busy && moved >= 4 && Date.now() - placeNow.failedAt > 60000) lookUpPlace(lat, lon);
+      const place = [placeNow.city, placeNow.state].filter(Boolean).join(', ');
+      document.getElementById('dhCity').textContent = place || 'Finding your location...';
+      const county = countyName(placeNow.county, placeNow.state);
+      document.getElementById('dhMeta').textContent = (county ? county + ' · ' : '') + 'Mile ' + Math.round(along[Math.min(index, along.length - 1)]) + ' / ' + Math.round(total);
     }
 
     // You've left the route: ask for a new route starting from where you are.
@@ -2009,8 +2084,7 @@
       if (nav.rerouting || now - nav.lastReroute < 20000) return;   // don't spam the routing service
       nav.rerouting = true; nav.lastReroute = now;
       speak('You are off route. Recalculating.');
-      document.getElementById('navBar').style.display = 'block';
-      document.getElementById('navBar').textContent = '↻ Off route - recalculating...';
+      navNote('↻ Off route - recalculating...');
       knownPlaces['My location'] = { lat, lon, radius: 100, t: Date.now() };
       document.getElementById('startBox').value = 'My location';
       document.getElementById('goButton').click();
@@ -2024,8 +2098,9 @@
       document.body.classList.add('driving');   // driving mode: big next-turn card, search card hidden
       setSheet('peek');
       updateEta(); updateSpeedSign();
-      document.getElementById('navBar').style.display = 'block';
-      document.getElementById('navBar').textContent = 'Waiting for GPS...';
+      placeNow.lat = null; placeNow.city = placeNow.county = placeNow.state = '';       // look up the town fresh for this drive
+      document.getElementById('dhCity').textContent = 'Finding your location...'; document.getElementById('dhMeta').textContent = '';
+      navNote('Waiting for GPS...');
       speak('Starting navigation.');
       await keepScreenAwake();
       startWatching();
@@ -2058,9 +2133,7 @@
     // and say so. A watchdog also restarts the GPS if it goes quiet while the app is on screen.
     async function resumeNavigation(why) {
       if (!nav.active) { if (currentRoute) updateEta(); return; }
-      const bar = document.getElementById('navBar');
-      bar.style.display = 'block';
-      bar.textContent = 'Back on navigation - finding your position...';
+      navNote('Back on navigation - finding your position...');
       try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch (e) { }       // drop anything that got stuck while away
       await keepScreenAwake();
       if (!holdingScreenAwake()) setTimeout(keepScreenAwake, 1500);        // the phone sometimes refuses the first moment after unlocking: try again
@@ -2274,7 +2347,7 @@
       currentRoute = { path, along: choice.along, maneuvers: choice.maneuvers, speeds: choice.speeds || [] };
       renderDirections();
       nav.index = 0; nav.spoken = {}; nav.rerouting = false;
-      if (nav.active) { document.getElementById('navBar').textContent = '✔ New route ready'; speak('New route ready.'); }
+      if (nav.active) { navNote('✔ New route ready'); speak('New route ready.'); }
 
       // Draw it: the other routes in gray (tap one to switch), the chosen one in orange on top.
       routeStuff.clearLayers();
@@ -2909,11 +2982,10 @@
       return list[lo].mph;
     }
     function updateSpeedSign() {
-      const limit = postedLimitAt(nav.index), cap = Number(document.getElementById('maxSpeedBox').value) || 0;
+      // Only the posted limit is shown. Your own top speed is used for the arrival time, but never displayed here.
+      const limit = postedLimitAt(nav.index);
       document.getElementById('speedSign').hidden = !limit;
       if (limit) document.getElementById('speedNum').textContent = limit;
-      document.getElementById('capSign').hidden = !cap;
-      if (cap) document.getElementById('capNum').textContent = cap;
     }
 
     // ---------- Show my location when the app opens ----------
