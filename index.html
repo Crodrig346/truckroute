@@ -435,7 +435,7 @@
       L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19 }),
       L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19 })
     ]);
-    L.control.layers({ 'Street map': streetMap, 'Satellite': satelliteMap }, null, { position: 'topright' }).addTo(map);
+    L.control.layers({ 'Street map': streetMap, 'Satellite': satelliteMap }, null, { position: 'bottomleft' }).addTo(map);
     try { if (localStorage.getItem('truckroute-basemap') === 'satellite') { map.removeLayer(streetMap); satelliteMap.addTo(map); } } catch (e) { }
     map.on('baselayerchange', (e) => { try { localStorage.setItem('truckroute-basemap', e.name === 'Satellite' ? 'satellite' : 'street'); } catch (x) { } });
 
