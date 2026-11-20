@@ -2108,7 +2108,7 @@
     function hereOn() { try { return localStorage.getItem('useHere') !== '0'; } catch (e) { return true; } }
     // The TruckRoute key server (Cloudflare) holds the real HERE key, so drivers need no key. Its web address goes here
     // once it is deployed. (For testing, the address can also be put in this browser's storage under "serverUrl".)
-    const KEY_SERVER = '';
+    const KEY_SERVER = 'https://truckroute-server.csanta0804.workers.dev';
     function serverUrl() { try { return (localStorage.getItem('serverUrl') || KEY_SERVER).replace(/\/+$/, ''); } catch (e) { return KEY_SERVER; } }
     // A random code made up by this device. The server only uses it to count requests per device: it is not a name or an account.
     function deviceId() {
