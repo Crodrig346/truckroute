@@ -14,6 +14,7 @@
   <meta name="apple-mobile-web-app-title" content="TruckRoute">
   <title>TruckRoute</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.css">
 
   <!-- Runs first, before anything is drawn, so a dark-mode phone never flashes white. -->
   <script>
@@ -41,7 +42,10 @@
       --shadow: 0 6px 24px rgba(0, 0, 0, .55);
     }
     /* The map pictures are light; this flips them to a dark version in dark mode. */
-    [data-theme="dark"] .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(.92) contrast(.88); }
+    /* Dark mode: flip the colors of the street map only (the picture tiles of the fallback map, or the MapLibre canvas).
+       The satellite layers are left alone, so they keep their true colors. */
+    [data-theme="dark"] .leaflet-tile-pane .leaflet-layer:not(.satelliteTile) img.leaflet-tile,
+    [data-theme="dark"] .leaflet-maplibre-gl-container, [data-theme="dark"] .maplibregl-canvas { filter: invert(1) hue-rotate(180deg) brightness(.92) contrast(.88); }
     [data-theme="dark"] .leaflet-container { background: #14181f; }
 
     /* Anything marked "hidden" must really be hidden. (Without this line, a style that sets "display" on an element wins
@@ -452,21 +456,34 @@
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <!-- The clean street map is drawn by MapLibre (a map-drawing library) using free OpenFreeMap data. -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@maplibre/maplibre-gl-leaflet@0.0.22/leaflet-maplibre-gl.js"></script>
   <script>
     // ---------- The map (same as step 1) ----------
     const map = L.map('map').setView([39.5, -98.35], 4);
-    const streetMap = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-      attribution: '© OpenStreetMap contributors'
-    }).addTo(map);
+    // A clean, Google-style street map: free OpenFreeMap data (made from OpenStreetMap) drawn by MapLibre. No account or key needed.
+    // Dark mode uses the same map with its colors flipped (see the CSS). If a phone can't draw it (no WebGL) or the
+    // libraries don't load, the app falls back to the standard OpenStreetMap picture tiles.
+    const STREET_STYLE = 'https://tiles.openfreemap.org/styles/positron';
+    let streetMap;
+    function webglWorks() { try { const c = document.createElement('canvas'); return !!(c.getContext('webgl2') || c.getContext('webgl')); } catch (e) { return false; } }
+    try {
+      if (typeof L.maplibreGL !== 'function' || typeof maplibregl === 'undefined' || !webglWorks()) throw new Error('vector maps unavailable');
+      streetMap = L.maplibreGL({ style: STREET_STYLE, attribution: '© OpenFreeMap © OpenMapTiles Data from OpenStreetMap' });
+    } catch (e) {
+      streetMap = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap contributors' });
+    }
+    streetMap.addTo(map);
+    function setStreetStyle(dark) { document.documentElement.classList.toggle('darkMap', dark); }
     // Satellite pictures (free Esri World Imagery) with road and town names drawn on top. Switch with the layers button on the map.
     // NOTE: fine for testing; check Esri's terms (or switch to a paid imagery provider) before selling the app in the stores.
     const satelliteMap = L.layerGroup([
       L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-        maxZoom: 19, attribution: 'Imagery © Esri, Maxar, Earthstar Geographics'
+        maxZoom: 19, className: 'satelliteTile', attribution: 'Imagery © Esri, Maxar, Earthstar Geographics'
       }),
-      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19 }),
-      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19 })
+      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, className: 'satelliteTile' }),
+      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, className: 'satelliteTile' })
     ]);
     // Voice on/off tile. It is added BEFORE the layers button so it sits just below it. Voice is OFF until you turn it on.
     // (The real switch is the "Voice guidance" box in the Truck tab, which the speak() function reads; this tile and that box stay in step.)
@@ -2552,6 +2569,7 @@
     // Light / dark mode: remembered on this device. The page picks your phone's setting the first time.
     function applyTheme(theme) {
       document.documentElement.setAttribute('data-theme', theme);
+      setStreetStyle(theme === 'dark');      // light or dark street map
       const color = theme === 'dark' ? '#181d25' : '#f5a623';
       document.querySelector('meta[name=theme-color]').setAttribute('content', color);
       try { localStorage.setItem('theme', theme); } catch (e) { }

@@ -3,12 +3,15 @@
 // so the app opens instantly and even opens with no signal.
 // It does NOT store routes, stops or map pictures - those always come live from the internet.
 
-const CACHE = 'truckroute-v23';   // change this number whenever the app files change, to force an update
+const CACHE = 'truckroute-v24';   // change this number whenever the app files change, to force an update
 const LEAFLET = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/';
 const APP_FILES = ['./', 'index.html', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png',
   // the map library and its little pictures (pins, buttons), saved up front so the app can start with no signal
   LEAFLET + 'leaflet.min.css', LEAFLET + 'leaflet.min.js',
-  LEAFLET + 'images/marker-icon.png', LEAFLET + 'images/marker-icon-2x.png', LEAFLET + 'images/marker-shadow.png', LEAFLET + 'images/layers.png'];
+  LEAFLET + 'images/marker-icon.png', LEAFLET + 'images/marker-icon-2x.png', LEAFLET + 'images/marker-shadow.png', LEAFLET + 'images/layers.png',
+  // the library that draws the clean street map (MapLibre) and its Leaflet connector
+  'https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.css', 'https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.js',
+  'https://cdn.jsdelivr.net/npm/@maplibre/maplibre-gl-leaflet@0.0.22/leaflet-maplibre-gl.js'];
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(APP_FILES)).then(() => self.skipWaiting()));
@@ -38,7 +41,7 @@ self.addEventListener('fetch', event => {
   }
 
   // The map library (Leaflet) from cdnjs: use the saved copy right away, refresh it quietly in the background.
-  if (url.hostname === 'cdnjs.cloudflare.com') {
+  if (url.hostname === 'cdnjs.cloudflare.com' || url.hostname === 'cdn.jsdelivr.net') {
     event.respondWith(
       caches.open(CACHE).then(cache => cache.match(request).then(saved => {
         const refresh = fetch(request).then(response => { cache.put(request, response.clone()); return response; }).catch(() => saved);
