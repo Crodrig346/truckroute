@@ -43,8 +43,8 @@
     /* The map pictures are light; this flips them to a dark version in dark mode. */
     /* Dark mode: flip the colors of the street map only (the picture tiles of the fallback map, or the MapLibre canvas).
        The satellite layers are left alone, so they keep their true colors. */
-    [data-theme="dark"] .leaflet-tile-pane .leaflet-layer:not(.satelliteTile) img.leaflet-tile,
-    [data-theme="dark"] .leaflet-maplibre-gl-container, [data-theme="dark"] .maplibregl-canvas { filter: invert(1) hue-rotate(180deg) brightness(.92) contrast(.88); }
+    /* (The clean MapLibre street map has its own dark colors, set in the script. This flip is only for the fallback picture map.) */
+    [data-theme="dark"] .leaflet-tile-pane .leaflet-layer:not(.satelliteTile) img.leaflet-tile { filter: invert(1) hue-rotate(180deg) brightness(1.15) contrast(1.05); }
     [data-theme="dark"] .leaflet-container { background: #14181f; }
 
     /* Anything marked "hidden" must really be hidden. (Without this line, a style that sets "display" on an element wins
@@ -102,7 +102,7 @@
     /* The summary card floats above the dock (phones). "--sheet-h" = how much of the bottom of the map is covered
        (dock + card); a little script keeps it up to date so the map buttons sit just above it. */
     body { --dock-h: calc(60px + env(safe-area-inset-bottom)); --sheet-h: var(--dock-h); }
-    #sheet { position: absolute; z-index: 1100; left: 10px; right: 10px; bottom: calc(var(--dock-h) + 10px); background: var(--card);
+    #sheet { position: absolute; z-index: 1100; left: 10px; right: 10px; bottom: calc(var(--dock-h) + var(--eta-h, 0px) + 10px); background: var(--card);
              border-radius: 18px; box-shadow: var(--shadow); max-height: 38vh; overflow-y: auto; }
     #sheet:not(:has(#message:not(:empty), #routeOptions.show, #fuelLine:not(:empty), #warnLine:not(:empty))) { display: none; }
     #summary { padding: 12px 16px 10px; }
@@ -111,6 +111,30 @@
     #dock { position: absolute; z-index: 1150; left: 0; right: 0; bottom: 0; display: grid; grid-template-columns: repeat(5, 1fr);
             background: var(--card); border-top: 1px solid var(--line); box-shadow: 0 -4px 18px rgba(15, 23, 42, .16);
             padding-bottom: env(safe-area-inset-bottom); }
+    /* The arrival bar (sits just above the dock, shows once a route exists) */
+    #etaBar { display: none; position: absolute; z-index: 1140; left: 0; right: 0; bottom: var(--dock-h); height: 54px; padding: 6px 16px;
+              align-items: center; justify-content: space-between; gap: 10px; background: var(--card); border-top: 1px solid var(--line);
+              box-shadow: 0 -3px 12px rgba(15, 23, 42, .12); cursor: pointer; user-select: none; -webkit-user-select: none; }
+    body.has-route #etaBar { display: flex; }
+    #etaMain { display: flex; flex-direction: column; min-width: 0; }
+    #etaBig { font-size: 20px; font-weight: 800; line-height: 1.15; }
+    #etaSmall { font-size: 13px; color: var(--muted); }
+    #etaSide { display: flex; flex-direction: column; align-items: flex-end; flex: none; }
+    #etaDelay { font-size: 13px; font-weight: 800; padding: 2px 9px; border-radius: 999px; }
+    #etaDelay:empty { display: none; }
+    #etaDelay.ok { background: var(--good-bg); color: var(--text); }
+    #etaDelay.slow { background: var(--bad-bg); color: var(--warn); }
+    #etaSwap { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    /* Speed limit signs: white rectangle like a real US sign, and a round badge for your own top speed */
+    #speedSigns { display: none; position: absolute; z-index: 1130; left: 10px; top: calc(env(safe-area-inset-top) + 84px); flex-direction: column; gap: 8px; pointer-events: none; }
+    body.driving #speedSigns { display: flex; }
+    #speedSign, #capSign { text-align: center; line-height: 1; font-family: system-ui, "Segoe UI", Arial, sans-serif; box-shadow: 0 2px 8px rgba(0, 0, 0, .35); }
+    #speedSign { width: 54px; padding: 5px 0 6px; background: #fff; color: #111; border: 2px solid #111; border-radius: 7px; outline: 2px solid #fff; }
+    #speedSign small, #capSign small { display: block; font-size: 8px; font-weight: 800; letter-spacing: .02em; }
+    #speedSign b { display: block; font-size: 26px; font-weight: 800; margin-top: 2px; }
+    #capSign { width: 54px; padding: 5px 0 6px; background: #1d4ed8; color: #fff; border-radius: 50%; width: 54px; height: 54px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+    #capSign[hidden], #speedSign[hidden] { display: none; }
+    #capSign b { font-size: 20px; font-weight: 800; }
     /* The full-page menu */
     #page { display: none; position: absolute; z-index: 1160; left: 0; right: 0; top: 0; bottom: var(--dock-h); background: var(--bg);
             flex-direction: column; padding-top: env(safe-area-inset-top); }
@@ -121,7 +145,7 @@
     #pageClose { color: var(--muted); font-size: 20px; min-width: 52px; }
     #pageBack:active, #pageClose:active { background: var(--line); }
     @media (max-width: 899px) {
-      body[data-page="open"] #search, body[data-page="open"] #navButton, body[data-page="open"] #sheet { display: none !important; }
+      body[data-page="open"] #search, body[data-page="open"] #navButton, body[data-page="open"] #sheet, body[data-page="open"] #etaBar, body[data-page="open"] #speedSigns { display: none !important; }
     }
     #message { font-size: 15px; font-weight: 600; }
     #message:empty { display: none; }      /* nothing to say = no empty gap */
@@ -266,6 +290,8 @@
       #pageHead { display: none; }
       #search.compact #brandRow { display: flex; }
       #navBar { left: 442px; }
+      #etaBar { left: 430px; bottom: 0; }
+      #speedSigns { left: 442px; top: 84px; }
       #stopFab { bottom: 16px; }
       #navButton { bottom: 22px; right: 22px; }
       #iosHint { left: 442px; bottom: 12px; }
@@ -353,6 +379,18 @@
       <button id="tabTrips"><span class="ico"><svg class="ic"><use href="#i-bookmark"/></svg></span><span class="lbl">Trips<span id="tripCount"></span></span></button>
     </nav>
 
+    <!-- The arrival bar along the bottom of the map. Tap it to switch between "arrive at" and "time left". -->
+    <div id="etaBar" role="button" tabindex="0" title="Tap to switch between arrival time and time remaining">
+      <div id="etaMain"><span id="etaBig"></span><small id="etaSmall"></small></div>
+      <div id="etaSide"><span id="etaDelay"></span><small id="etaSwap">tap to switch</small></div>
+    </div>
+
+    <!-- Speed limit signs, shown while driving (the posted limit from HERE, and your own top speed if you set one) -->
+    <div id="speedSigns">
+      <div id="speedSign" hidden><small>SPEED<br>LIMIT</small><b id="speedNum"></b></div>
+      <div id="capSign" hidden><small>YOUR<br>TOP</small><b id="capNum"></b></div>
+    </div>
+
     <!-- The full-page menus. On a phone this covers the map until you go back; on a computer it is the side panel. -->
     <div id="page">
       <div id="pageHead">
@@ -394,6 +432,8 @@
               <label>Length (ft) <input id="lengthBox" type="number" step="0.5" value="70"></label>
               <label>Width (ft) <input id="widthBox" type="number" step="0.1" value="8.5"></label>
               <label>Fuel economy (MPG) <input id="mpgBox" type="number" step="0.1" value="6.5"></label>
+              <label>Your top speed (mph) <input id="maxSpeedBox" type="number" step="1" min="30" max="85" placeholder="no limit"></label>
+              <small class="wide">If your truck is governed (for example at 65 mph), enter it. Arrival times are worked out as if you never go faster than this, even where the posted limit is higher. Leave blank for none.</small>
               <label>List stops by
                 <select id="sortBox"><option value="mile">Mile marker</option><option value="price">Cheapest diesel</option></select>
               </label>
@@ -410,6 +450,7 @@
                 <select id="ferryBox"><option value="avoid">Avoid</option><option value="allow" selected>Allow</option></select>
               </label>
               <label class="check wide"><input id="truckRouteBox" type="checkbox"> Prefer designated truck routes</label>
+              <label class="check wide"><input id="trafficBox" type="checkbox"> Live traffic (arrival times and delays use current traffic)</label>
             </div>
             <small>"Avoid" is a strong preference, not a ban: if there is no other way, a route may still use one.
               Press Find route again after changing these. Routes show whether they use tolls or a ferry, but toll prices are not available yet.</small>
@@ -493,22 +534,54 @@
     function tuneStreetStyle(gl) {
       const hide = ['highway-name-path', 'highway-name-minor', 'label_other', 'building', 'waterway_line_label', 'highway_path'];
       for (const id of hide) if (gl.getLayer(id)) gl.setLayoutProperty(id, 'visibility', 'none');
-      const paint = {
-        'background': ['background-color', '#f3f1ec'],
-        'park': ['fill-color', '#cde8c4'],
-        'landcover_wood': ['fill-color', '#d3e8c9'],
-        'landuse_residential': ['fill-color', '#eeece6'],
-        'water': ['fill-color', '#a9d3ee'],
-        'waterway': ['line-color', '#a9d3ee'],
-        'water_name_point_label': ['text-color', '#4b7fa8'],
-        'water_name_line_label': ['text-color', '#4b7fa8'],
-        'highway_motorway_inner': ['line-color', '#fbeab9'],
-        'highway_motorway_bridge_inner': ['line-color', '#fbeab9'],
-        'highway_motorway_casing': ['line-color', '#e3c77f'],
-        'highway_motorway_bridge_casing': ['line-color', '#e3c77f']
-      };
-      for (const [id, [prop, color]] of Object.entries(paint)) if (gl.getLayer(id)) gl.setPaintProperty(id, prop, color);
       if (gl.getLayer('label_village')) gl.setLayerZoomRange('label_village', 11, 24);      // tiny towns only when zoomed in
+      paintStreetMap(gl);
+    }
+    // The colors of the street map, for light mode and for dark mode: [layer, property, light color, dark color].
+    // The dark colors are chosen to stay readable in direct sunlight: a mid-dark slate background (not black),
+    // bright white roads, yellow highways, and white place names with a dark outline.
+    const MAP_COLORS = [
+      ['background', 'background-color', '#f3f1ec', '#323a48'],
+      ['park', 'fill-color', '#cde8c4', '#3b5a40'],
+      ['landcover_wood', 'fill-color', '#d3e8c9', '#35523b'],
+      ['landuse_residential', 'fill-color', '#eeece6', '#3a4252'],
+      ['water', 'fill-color', '#a9d3ee', '#2f6ba3'],
+      ['waterway', 'line-color', '#a9d3ee', '#2f6ba3'],
+      ['water_name_point_label', 'text-color', '#4b7fa8', '#bfe0ff'],
+      ['water_name_line_label', 'text-color', '#4b7fa8', '#bfe0ff'],
+      ['water_name_point_label', 'text-halo-color', 'rgba(255,255,255,0.7)', 'rgba(20,28,40,0.85)'],
+      ['water_name_line_label', 'text-halo-color', 'rgba(255,255,255,0.7)', 'rgba(20,28,40,0.85)'],
+      ['highway_minor', 'line-color', 'hsl(0,0%,88%)', '#69758a'],
+      ['highway_major_casing', 'line-color', 'rgb(213,213,213)', '#242b37'],
+      ['highway_major_inner', 'line-color', '#ffffff', '#f2f5fa'],
+      ['highway_major_subtle', 'line-color', 'hsla(0,0%,85%,0.69)', 'hsla(215,15%,72%,0.7)'],
+      ['highway_motorway_inner', 'line-color', '#fbeab9', '#ffd75e'],
+      ['highway_motorway_bridge_inner', 'line-color', '#fbeab9', '#ffd75e'],
+      ['highway_motorway_casing', 'line-color', '#e3c77f', '#7a5f12'],
+      ['highway_motorway_bridge_casing', 'line-color', '#e3c77f', '#7a5f12'],
+      ['highway_motorway_subtle', 'line-color', 'hsla(0,0%,85%,0.53)', 'hsla(215,15%,72%,0.6)'],
+      ['tunnel_motorway_inner', 'line-color', 'rgb(234,234,234)', '#8b95a8'],
+      ['tunnel_motorway_casing', 'line-color', 'rgb(213,213,213)', '#242b37'],
+      ['railway', 'line-color', '#dddddd', '#6b778d'],
+      ['railway_dashline', 'line-color', '#fafafa', '#323a48'],
+      ['aeroway-taxiway', 'line-color', 'hsl(0,0%,88%)', '#69758a'],
+      ['aeroway-runway', 'line-color', 'rgba(255,255,255,1)', '#c9d2e0'],
+      ['aeroway-area', 'fill-color', 'rgba(255,255,255,1)', '#46506a'],
+      ['boundary_2', 'line-color', 'hsl(0,0%,70%)', 'hsl(215,15%,70%)'],
+      ['boundary_3', 'line-color', 'hsl(0,0%,70%)', 'hsl(215,15%,70%)'],
+      ['highway-name-major', 'text-color', '#666666', '#f3f6fb'],
+      ['highway-name-major', 'text-halo-color', 'rgba(255,255,255,0.9)', 'rgba(24,30,42,0.95)'],
+      ['airport', 'text-color', '#666666', '#e6ebf3'],
+      ['airport', 'text-halo-color', '#ffffff', 'rgba(24,30,42,0.95)']
+    ];
+    for (const id of ['label_village', 'label_town', 'label_city', 'label_city_capital', 'label_country_1', 'label_country_2', 'label_country_3']) {
+      MAP_COLORS.push([id, 'text-color', '#000000', '#ffffff'], [id, 'text-halo-color', '#ffffff', 'rgba(24,30,42,0.95)']);
+    }
+    MAP_COLORS.push(['label_state', 'text-color', '#333333', '#e6ebf3'], ['label_state', 'text-halo-color', '#ffffff', 'rgba(24,30,42,0.95)']);
+    function paintStreetMap(gl) {
+      const dark = document.documentElement.classList.contains('darkMap');
+      for (const [id, prop, light, night] of MAP_COLORS) if (gl.getLayer(id)) gl.setPaintProperty(id, prop, dark ? night : light);
+      if (dark && gl.getLayer('highway-name-major')) gl.setPaintProperty('highway-name-major', 'text-halo-width', 1.6);   // outline so road names stand out
     }
     try {
       if (typeof streetMap.getMaplibreMap === 'function') {
@@ -517,7 +590,10 @@
         if (gl.isStyleLoaded()) tuneStreetStyle(gl);
       }
     } catch (e) { }
-    function setStreetStyle(dark) { document.documentElement.classList.toggle('darkMap', dark); }
+    function setStreetStyle(dark) {
+      document.documentElement.classList.toggle('darkMap', dark);
+      try { if (typeof streetMap.getMaplibreMap === 'function') { const gl = streetMap.getMaplibreMap(); if (gl.isStyleLoaded()) paintStreetMap(gl); } } catch (e) { }
+    }
     // Satellite pictures (free Esri World Imagery) with road and town names drawn on top. Switch with the layers button on the map.
     // NOTE: fine for testing; check Esri's terms (or switch to a paid imagery provider) before selling the app in the stores.
     const satelliteMap = L.layerGroup([
@@ -527,6 +603,42 @@
       L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, className: 'satelliteTile' }),
       L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, className: 'satelliteTile' })
     ]);
+    // Re-center tile (bottom of the left-hand buttons). While driving, the map follows your truck until you move or zoom it
+    // yourself; then it stays put and this tile turns orange. Tap it to snap back to your location and follow again.
+    const recenterControl = L.control({ position: 'bottomleft' });
+    recenterControl.onAdd = () => {
+      const bar = L.DomUtil.create('div', 'leaflet-bar voiceTile');
+      const button = L.DomUtil.create('a', '', bar);
+      button.id = 'recenterTile'; button.href = '#'; button.setAttribute('role', 'button'); button.title = 'Go to my location'; button.setAttribute('aria-label', 'Go to my location');
+      button.innerHTML = '<svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="6.5"/><circle cx="12" cy="12" r="2" fill="currentColor"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>';
+      L.DomEvent.disableClickPropagation(bar);
+      L.DomEvent.on(button, 'click', (event) => { L.DomEvent.preventDefault(event); recenterOnMe(); });
+      return bar;
+    };
+    recenterControl.addTo(map);
+    function syncRecenterTile() {
+      const tile = document.getElementById('recenterTile');
+      if (tile) tile.classList.toggle('on', !!(nav.active && !nav.follow));
+    }
+    function recenterOnMe() {
+      if (nav.active) {                                       // driving: back to following the truck
+        nav.follow = true; syncRecenterTile();
+        if (nav.last) map.setView(nav.last, Math.max(map.getZoom(), 15), { animate: true });
+        return;
+      }
+      if (!navigator.geolocation) return;                     // not driving: find where you are right now
+      navigator.geolocation.getCurrentPosition(p => {
+        const { latitude: lat, longitude: lon, accuracy } = p.coords;
+        knownPlaces['My location'] = { lat, lon, radius: 100, t: Date.now() };
+        showMeDot(lat, lon, accuracy);
+        map.setView([lat, lon], Math.max(map.getZoom(), 14), { animate: true });
+      }, () => { say('Could not get your location. Check that location is allowed for this app.'); }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 });
+    }
+    // Moving or zooming the map yourself stops it from following the truck.
+    function stopFollowing() { if (nav.active && nav.follow) { nav.follow = false; syncRecenterTile(); } }
+    map.on('dragstart', stopFollowing);
+    map.getContainer().addEventListener('wheel', stopFollowing, { passive: true });
+    map.getContainer().addEventListener('touchstart', (event) => { if (event.touches.length > 1) stopFollowing(); }, { passive: true });
     // Voice on/off tile. It is added BEFORE the layers button so it sits just below it. Voice is OFF until you turn it on.
     // (The real switch is the "Voice guidance" box in the Truck tab, which the speak() function reads; this tile and that box stay in step.)
     const voiceControl = L.control({ position: 'bottomleft' });
@@ -744,6 +856,7 @@
       if (prefs.tolls === 'avoid') costing.use_tolls = 0; else if (prefs.tolls === 'prefer') costing.use_tolls = 1;
       if (prefs.ferries === 'avoid') costing.use_ferry = 0;
       if (prefs.truckRoute) costing.use_truck_route = 1;
+      if (truck.maxSpeedMph) costing.top_speed = Math.round(truck.maxSpeedMph * 1.609344);      // your governed speed, in km/h
       Object.assign(costing, extraCosting);
       const request = {
         // "radius" says how far (in meters) the service may look for the nearest road. A town center might not
@@ -841,7 +954,7 @@
         choices.push({
           path, along: cumulativeMiles(path), maneuvers: item.trip.legs[0].maneuvers,
           miles: summary.length, seconds: summary.time, hasToll: !!summary.has_toll, hasFerry: !!summary.has_ferry,
-          tollCost: item.tollCost ?? null,
+          tollCost: item.tollCost ?? null, speeds: item.speeds || [], delaySeconds: item.delaySeconds ?? null,
           gallons: estimateGallons(summary.length, summary.time, mpg), origin: [...item.origin], sources: new Set([item.source])
         });
       }
@@ -1144,8 +1257,11 @@
                         ';nwr[amenity=parking][hgv~"^(yes|designated)$"]' + near +
                         ';nwr[amenity=parking]["capacity:hgv"]' + near +
                         // anything with a posted height limit (we check the height ourselves, in draw())
-                        ';nwr[maxheight]' + near + ';nwr["maxheight:physical"]' + near + ';);out center tags 500;';
-          const clearanceQuery = '[out:json][timeout:60];(nwr[maxheight]' + near + ';nwr["maxheight:physical"]' + near + ';);out center tags 300;';
+                        ';nwr[maxheight]' + near + ';nwr["maxheight:physical"]' + near +
+                        // highway exits (their numbers are shown in the stop list)
+                        ';node[highway=motorway_junction][ref]' + near + ';);out center tags 800;';
+          const clearanceQuery = '[out:json][timeout:60];(nwr[maxheight]' + near + ';nwr["maxheight:physical"]' + near +
+                                 ';node[highway=motorway_junction][ref]' + near + ';);out center tags 500;';
           if (myRun !== stopsRunId) return;         // a newer route search has started: stop working for the old one
           const addElements = (items) => {
             for (const item of items) {
@@ -1192,6 +1308,9 @@
                             ' sections could not be searched (service busy), so some stops may be missing.</small></div>' : '');
       const stops = [];
       const truckHeightM = Number(document.getElementById('heightBox').value) * FEET_TO_METERS;
+      // Highway exits found along the route (from the map data): used to say "Exit 261" for each stop.
+      const exits = found.filter(it => it.tags && it.tags.highway === 'motorway_junction' && it.tags.ref && it.lat != null)
+                         .map(it => ({ lat: it.lat, lon: it.lon, ref: it.tags.ref }));
       for (const item of found) {
         const lat = item.lat ?? (item.center && item.center.lat);
         const lon = item.lon ?? (item.center && item.center.lon);
@@ -1217,8 +1336,12 @@
         if (kind === 'scale' && away > 1.5) continue;
         // A low clearance only matters if it's actually ON your road, so keep it only if it's within ~0.1 mile.
         if (kind === 'bridge' && away > 0.1) continue;
+        // The closest highway exit within 2 miles of the stop (if the map data has one), and its city and state.
+        let exit = null, exitDist = 2;
+        for (const e of exits) { const d = miles([lat, lon], [e.lat, e.lon]); if (d < exitDist) { exitDist = d; exit = e.ref; } }
+        const city = tags['addr:city'] || '', state = tags['addr:state'] || '';
         stops.push({ key: item.type + '/' + item.id, kind, clearance, lat, lon, name: tags.name || tags.brand || NAMES[kind],
-                     mile: along[bestIndex], away, tags });
+                     mile: along[bestIndex], away, tags, exit, place: [city, state].filter(Boolean).join(', ') });
       }
       stops.sort((a, b) => a.mile - b.mile);
       currentStops = stops;   // the driving plan uses this list to suggest where to stop
@@ -1268,7 +1391,8 @@
         row.textContent = s.name + '  - ' + NAMES[s.kind];
         row.prepend(badgeElement(tooLowForYou ? 'danger' : s.kind, 'row'));   // the colored round icon at the left
         const detail = document.createElement('small');
-        detail.textContent = 'mile ' + s.mile.toFixed(0) + ' - ' + s.away.toFixed(1) + ' mi off route' + priceText(s, cheapestKey) +
+        detail.textContent = (s.place ? s.place + ' · ' : '') + (s.exit ? 'Exit ' + s.exit + ' · ' : '') +
+                            'mile ' + s.mile.toFixed(0) + ' - ' + s.away.toFixed(1) + ' mi off route' + priceText(s, cheapestKey) +
                             (s.kind === 'scale' ? ' - open/closed status not available' : '') +
                             (s.kind === 'parking' && s.tags['capacity:hgv'] ? ' - ' + s.tags['capacity:hgv'] + ' truck spaces' : '') +
                             (s.kind === 'bridge' ? ' - clearance ' + fmtFt(s.clearance) + (tooLowForYou ? ' - LOWER than your truck!' : ' - tight for your truck') : '');
@@ -1558,10 +1682,13 @@
     // the stop button and the map credit line sit just above them.
     {
       const sync = () => {
-        const dock = document.getElementById('dock'), card = document.getElementById('sheet');
+        const dock = document.getElementById('dock'), card = document.getElementById('sheet'), eta = document.getElementById('etaBar');
+        const etaH = getComputedStyle(eta).display === 'none' ? 0 : eta.offsetHeight;
         const cardH = getComputedStyle(card).display === 'none' ? 0 : card.offsetHeight + 10;
-        document.body.style.setProperty('--sheet-h', (dock.offsetHeight + cardH) + 'px');
+        document.body.style.setProperty('--eta-h', etaH + 'px');
+        document.body.style.setProperty('--sheet-h', (dock.offsetHeight + etaH + cardH) + 'px');
       };
+      new ResizeObserver(sync).observe(document.getElementById('etaBar'));
       new ResizeObserver(sync).observe(document.getElementById('sheet'));
       new ResizeObserver(sync).observe(document.getElementById('dock'));
       window.addEventListener('resize', sync);
@@ -1782,7 +1909,7 @@
     // a point on the route line. For live navigation we watch your GPS position, work out where you are on
     // the line, and tell you what's coming next - on screen and out loud.
     let currentRoute = null;         // {path: route points, along: miles at each point, maneuvers: steps}
-    const nav = { active: false, watchId: null, index: 0, spoken: {}, lastReroute: 0, rerouting: false, wakeLock: null };
+    const nav = { active: false, watchId: null, index: 0, spoken: {}, lastReroute: 0, rerouting: false, wakeLock: null, follow: true, last: null, lastFixAt: 0, hiddenAt: 0, startWhenReady: false };
     let youMarker = null;
 
     function cumulativeMiles(path) {
@@ -1838,13 +1965,19 @@
       }
       if (away > 0.3) { offRoute(lat, lon); return; }
       nav.index = index;
+      updateEta(); updateSpeedSign();
 
       // Show your position on the map.
       const firstFix = !youMarker;
       if (firstFix) youMarker = L.circleMarker([lat, lon], { radius: 9, color: '#fff', weight: 3, fillColor: '#2563eb', fillOpacity: 1 }).addTo(map);
       youMarker.setLatLng([lat, lon]);
-      if (firstFix) map.setView([lat, lon], 15);           // zoom in on the truck the first time
-      else map.panTo([lat, lon], { animate: true });       // after that, just follow it
+      nav.last = [lat, lon]; nav.lastFixAt = Date.now();    // remembered so the re-center tile knows where you are
+      // The map follows the truck only until you move or zoom it yourself. Then it stays exactly where you put it,
+      // until you tap the re-center tile.
+      if (nav.follow) {
+        if (firstFix) map.setView([lat, lon], 15);          // zoom in on the truck the first time
+        else map.panTo([lat, lon], { animate: true });      // after that, just follow it
+      }
 
       // What's the next turn? The first step that begins ahead of us.
       let j = maneuvers.findIndex(m => m.begin_shape_index > index);
@@ -1886,20 +2019,95 @@
     async function startNav() {
       if (!currentRoute) { say('Find a route first, then press Start driving.'); return; }
       if (!navigator.geolocation) { say('This device has no GPS access.'); return; }
-      nav.active = true; nav.index = 0; nav.spoken = {};
+      nav.active = true; nav.index = 0; nav.spoken = {}; nav.follow = true; nav.last = null;
+      syncRecenterTile();
       document.body.classList.add('driving');   // driving mode: big next-turn card, search card hidden
       setSheet('peek');
+      updateEta(); updateSpeedSign();
       document.getElementById('navBar').style.display = 'block';
       document.getElementById('navBar').textContent = 'Waiting for GPS...';
       speak('Starting navigation.');
-      try { if (navigator.wakeLock) nav.wakeLock = await navigator.wakeLock.request('screen'); } catch (e) { }   // keep the screen awake
+      await keepScreenAwake();
+      startWatching();
+      rememberTrip();
+    }
+    // Ask the phone to keep the screen on while driving. The phone cancels this whenever the app goes out of view
+    // (screen lock, switching apps), so it has to be asked again every time you come back.
+    async function keepScreenAwake() {
+      if (!navigator.wakeLock) return;                                   // an older phone/browser that cannot do this
+      if (nav.wakeLock && !nav.wakeLock.released) return;                // already holding it
+      try {
+        const lock = await navigator.wakeLock.request('screen');
+        nav.wakeLock = lock;
+        lock.addEventListener('release', () => { if (nav.wakeLock === lock) nav.wakeLock = null; });      // the phone took it back: we ask again
+      } catch (e) { nav.wakeLock = null; }                               // refused (for instance while the app was not fully back on screen yet)
+    }
+    function holdingScreenAwake() { return !!(nav.wakeLock && !nav.wakeLock.released); }
+    // (Re)start listening to the GPS. A fresh start is also the cure when the phone has quietly stopped sending positions.
+    function startWatching() {
+      if (nav.watchId !== null) { try { navigator.geolocation.clearWatch(nav.watchId); } catch (e) { } nav.watchId = null; }
       nav.watchId = navigator.geolocation.watchPosition(
         p => handleFix(p.coords.latitude, p.coords.longitude),
-        e => say('GPS problem: ' + e.message),
+        e => { if (e.code === 1) say('GPS is blocked for this app. Allow location in your phone settings to keep navigating.'); else say('GPS problem: ' + e.message); },
         { enableHighAccuracy: true, maximumAge: 2000 });
     }
+    // ----- Locking the phone / switching apps -----
+    // A web app is frozen by the phone when it is not on screen: it gets no GPS positions, no voice and no timers.
+    // So we cannot keep guiding with the screen off (that needs a store app, later). What we CAN do is pick up
+    // instantly when you come back: ask for the screen-awake lock again, restart the GPS, jump to where you are now,
+    // and say so. A watchdog also restarts the GPS if it goes quiet while the app is on screen.
+    async function resumeNavigation(why) {
+      if (!nav.active) { if (currentRoute) updateEta(); return; }
+      const bar = document.getElementById('navBar');
+      bar.style.display = 'block';
+      bar.textContent = 'Back on navigation - finding your position...';
+      try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch (e) { }       // drop anything that got stuck while away
+      await keepScreenAwake();
+      if (!holdingScreenAwake()) setTimeout(keepScreenAwake, 1500);        // the phone sometimes refuses the first moment after unlocking: try again
+      startWatching();
+      // Don't wait for the next GPS update: ask for a position right now.
+      navigator.geolocation.getCurrentPosition(
+        p => { nav.follow = true; syncRecenterTile(); handleFix(p.coords.latitude, p.coords.longitude); updateEta(); },
+        () => { /* the restarted watch will report as soon as it can */ },
+        { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 });
+    }
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') { nav.hiddenAt = Date.now(); return; }
+      resumeNavigation('visible');
+    });
+    window.addEventListener('pageshow', (event) => { if (event.persisted) resumeNavigation('pageshow'); });
+    setInterval(() => {                                   // watchdog, while driving and on screen
+      if (!nav.active || document.visibilityState !== 'visible') return;
+      if (!holdingScreenAwake()) keepScreenAwake();       // the screen must not go dark while you drive
+      if (Date.now() - (nav.lastFixAt || 0) > 25000 && nav.lastRestart !== nav.lastFixAt) { nav.lastRestart = nav.lastFixAt; startWatching(); }   // no position for 25 s
+    }, 8000);
+    // Any touch while driving is also a chance to take the screen-awake lock back.
+    document.addEventListener('pointerdown', () => { if (nav.active && !holdingScreenAwake()) keepScreenAwake(); }, { passive: true });
+
+    // ----- Remembering a trip in progress -----
+    // Phones sometimes close an app that has been away for a while. So the destination of a trip in progress is remembered,
+    // and when the app is opened again it offers to carry on.
+    function rememberTrip() {
+      if (!lastSearch) return;
+      try { localStorage.setItem('tripInProgress', JSON.stringify({ endText: lastSearch.endText, end: lastSearch.end, t: Date.now() })); } catch (e) { }
+    }
+    function forgetTrip() { try { localStorage.removeItem('tripInProgress'); } catch (e) { } }
+    function offerToResumeTrip() {
+      let saved = null;
+      try { saved = JSON.parse(localStorage.getItem('tripInProgress')); } catch (e) { }
+      if (!saved || !saved.end || Date.now() - saved.t > 8 * 3600 * 1000) { forgetTrip(); return; }
+      if (!confirm('Carry on with your trip to ' + saved.endText + '?\n\nThe route will be worked out again from where you are now.')) { forgetTrip(); return; }
+      knownPlaces[saved.endText] = saved.end;
+      document.getElementById('endBox').value = saved.endText;
+      document.getElementById('startBox').value = 'My location'; syncStartUI();
+      nav.startWhenReady = true;                           // chooseRoute() starts driving as soon as the new route is ready
+      document.getElementById('goButton').click();
+    }
     function stopNav() {
-      nav.active = false;
+      nav.active = false; nav.follow = true;
+      forgetTrip();
+      syncRecenterTile();
+      if (currentRoute) updateEta();
       document.body.classList.remove('driving');
       if (nav.watchId !== null && navigator.geolocation) navigator.geolocation.clearWatch(nav.watchId);
       nav.watchId = null;
@@ -1990,9 +2198,21 @@
         document.getElementById('widthBox').value = t.widthFt;
         document.getElementById('hazmatBox').checked = t.hazmat;
         if (t.mpg) document.getElementById('mpgBox').value = t.mpg;
+        if (t.maxSpeedMph) document.getElementById('maxSpeedBox').value = t.maxSpeedMph;
       } catch (e) { }
     }
     loadTruck();
+    // Your top speed and the live-traffic switch are remembered on this device as soon as you change them.
+    document.getElementById('maxSpeedBox').addEventListener('change', () => {
+      try { const t = JSON.parse(localStorage.getItem('myTruck')) || {}; t.maxSpeedMph = Number(document.getElementById('maxSpeedBox').value) || 0; localStorage.setItem('myTruck', JSON.stringify(t)); } catch (e) { }
+      if (lastSearch) say('Top speed changed. Press Find route to update the arrival time.');
+    });
+    function trafficOn() { try { return localStorage.getItem('liveTraffic') === '1'; } catch (e) { return false; } }
+    document.getElementById('trafficBox').checked = trafficOn();
+    document.getElementById('trafficBox').addEventListener('change', (event) => {
+      try { localStorage.setItem('liveTraffic', event.target.checked ? '1' : '0'); } catch (e) { }
+      if (lastSearch) say('Live traffic ' + (event.target.checked ? 'on' : 'off') + '. Press Find route to update.' + (event.target.checked && !(hereReady() && hereRoutingOn()) ? ' (Traffic needs HERE routing.)' : ''));
+    });
 
     // Remember your route preferences (tolls, ferries, truck routes) on this device too.
     function saveRoutePrefs() { try { localStorage.setItem('routePrefs', JSON.stringify(readRoutePrefs())); } catch (e) { } }
@@ -2051,7 +2271,7 @@
       chosenRoute = index;
       const path = choice.path, { start, end } = lastSearch;
       // The turn-by-turn steps, used by the Route tab and live navigation.
-      currentRoute = { path, along: choice.along, maneuvers: choice.maneuvers };
+      currentRoute = { path, along: choice.along, maneuvers: choice.maneuvers, speeds: choice.speeds || [] };
       renderDirections();
       nav.index = 0; nav.spoken = {}; nav.rerouting = false;
       if (nav.active) { document.getElementById('navBar').textContent = '✔ New route ready'; speak('New route ready.'); }
@@ -2063,6 +2283,9 @@
         if (j === index) return;
         L.polyline(other.path, { color: '#8a94a6', weight: 6, opacity: 0.8 }).addTo(routeStuff).on('click', () => chooseRoute(j));
       });
+      // A thin outline under the route (dark in dark mode, white in light mode) so it stands out from yellow highways and white roads.
+      const darkNow = document.documentElement.getAttribute('data-theme') === 'dark';
+      L.polyline(path, { color: darkNow ? '#10141b' : '#ffffff', weight: 11, opacity: 0.92 }).addTo(routeStuff);
       L.polyline(path, { color: '#e07b00', weight: 7 }).addTo(routeStuff);
       L.marker([start.lat, start.lon]).addTo(routeStuff).bindPopup('Start');
       L.marker([end.lat, end.lon]).addTo(routeStuff).bindPopup('Destination');
@@ -2084,7 +2307,8 @@
           (choice.hasFerry ? ' Uses a ferry.' : '') + routeSourceNote + lastCoarseNote);
 
       // Work out the required breaks for this route.
-      currentTrip = { hours: choice.seconds / 3600, miles: choice.miles, gallons: choice.gallons };
+      currentTrip = { hours: choice.seconds / 3600, miles: choice.miles, gallons: choice.gallons, delay: choice.delaySeconds };
+      updateEta();
       currentStops = [];
       selectedKeys.clear();                                  // a new route starts with a clean map
       for (const key in markerByKey) delete markerByKey[key];
@@ -2092,6 +2316,8 @@
       updateFuelLine();
       document.getElementById('warnLine').textContent = '';   // clear last route's clearance warning
 
+      // Carrying on a trip after the app was reopened: start driving as soon as the new route is ready.
+      if (nav.startWhenReady) { nav.startWhenReady = false; startNav(); }
       // Now look for stops along it. If this fails, the route above stays on the map.
       try { await showStops(path); }
       catch (stopError) {
@@ -2143,7 +2369,8 @@
           lengthFt: Number(document.getElementById('lengthBox').value),
           widthFt: Number(document.getElementById('widthBox').value),
           hazmat: document.getElementById('hazmatBox').checked,
-          mpg: Number(document.getElementById('mpgBox').value)
+          mpg: Number(document.getElementById('mpgBox').value),
+          maxSpeedMph: Number(document.getElementById('maxSpeedBox').value) || 0      // 0 = no top speed
         };
         saveTruck(truck);
 
@@ -2369,6 +2596,7 @@
       const names = categories.map(c => (c.name || '').toLowerCase());
       if (names.some(n => n.includes('ev charging'))) return null;          // electric charging isn't diesel
       const tags = { name: item.title };
+      if (item.address) { tags['addr:city'] = item.address.city || item.address.district || ''; tags['addr:state'] = item.address.stateCode || ''; }   // for "City, ST" in the stop list
       const chain = item.chains && item.chains[0] && item.chains[0].name;
       if (chain) tags.brand = chain;
       if (ids.includes('400-4200-0048')) tags.amenity = 'weighbridge';
@@ -2421,6 +2649,9 @@
       if (truck.lengthFt > 45) params['vehicle[trailerCount]'] = '1';              // a tractor-trailer, not a straight truck
       if (truck.hazmat) params['vehicle[shippedHazardousGoods]'] = 'other';
       if (wantTolls) params.currency = 'USD';
+      params.spans = 'speedLimit';                                                  // posted speed limits along the route
+      if (truck.maxSpeedMph) params['vehicle[speedCap]'] = (truck.maxSpeedMph * 0.44704).toFixed(2);   // your top speed, in meters per second
+      if (trafficOn()) params.departureTime = new Date().toISOString().replace(/\.\d+Z$/, 'Z');       // leaving now: HERE uses live traffic
       const avoid = [];
       if (prefs.tolls === 'avoid' || extra.avoidTolls) avoid.push('tollRoad');
       if (prefs.ferries === 'avoid' || extra.avoidFerries) avoid.push('ferry');
@@ -2437,8 +2668,8 @@
 
     // Turns one route from HERE into the shape the rest of the app uses (the same one the free router's routes are given).
     function hereRouteToCandidate(route) {
-      let path = [], seconds = 0, meters = 0, hasToll = false, hasFerry = false, tollTotal = 0, tollPriced = false;
-      const maneuvers = [];
+      let path = [], seconds = 0, meters = 0, hasToll = false, hasFerry = false, tollTotal = 0, tollPriced = false, baseSeconds = 0, hasBase = true;
+      const maneuvers = [], speeds = [];       // speeds: [{i: spot on the route line, mph: posted limit from there on}]
       // HERE's instructions end with a distance sentence ("Go for 3 mi."). Our screens show the distance themselves.
       const tidy = (text) => String(text || '').replace(/\s*Go for \d[\d.,]*\s*[a-z]+\.?\s*$/i, '').trim();    // handles "Go for 0.6 mi." and "Go for 300 ft."
       for (const section of route.sections || []) {
@@ -2446,8 +2677,14 @@
         const base = path.length ? path.length - 1 : 0;           // a later section starts where the previous one ended
         path = path.length ? path.concat(points.slice(1)) : points;
         seconds += (section.summary && section.summary.duration) || 0;
+        // "baseDuration" is the time WITHOUT live traffic, so the difference is the traffic delay.
+        if (section.summary && typeof section.summary.baseDuration === 'number') baseSeconds += section.summary.baseDuration; else hasBase = false;
         meters += (section.summary && section.summary.length) || 0;
         if (section.transport && section.transport.mode === 'ferry') hasFerry = true;
+        // Posted speed limits (HERE gives them in meters per second; posted limits are in steps of 5 mph).
+        for (const span of section.spans || []) {
+          if (typeof span.speedLimit === 'number') speeds.push({ i: Math.min(path.length - 1, base + (span.offset || 0)), mph: Math.round(span.speedLimit * 2.23694 / 5) * 5 });
+        }
         for (const action of section.actions || []) {
           maneuvers.push({
             instruction: tidy(action.instruction) || action.action,
@@ -2466,7 +2703,9 @@
       }
       return {
         trip: { summary: { length: meters / 1609.344, time: seconds, has_toll: hasToll, has_ferry: hasFerry }, legs: [{ maneuvers }] },
-        path, tollCost: tollPriced ? tollTotal : null
+        path, tollCost: tollPriced ? tollTotal : null,
+        speeds: speeds.sort((a, b) => a.i - b.i),
+        delaySeconds: trafficOn() && hasBase ? Math.max(0, seconds - baseSeconds) : null      // null = not known / traffic is off
       };
     }
 
@@ -2524,7 +2763,8 @@
       return {
         heightFt: Number(document.getElementById('heightBox').value), weightLbs: Number(document.getElementById('weightBox').value),
         lengthFt: Number(document.getElementById('lengthBox').value), widthFt: Number(document.getElementById('widthBox').value),
-        hazmat: document.getElementById('hazmatBox').checked, mpg: Number(document.getElementById('mpgBox').value)
+        hazmat: document.getElementById('hazmatBox').checked, mpg: Number(document.getElementById('mpgBox').value),
+        maxSpeedMph: Number(document.getElementById('maxSpeedBox').value) || 0
       };
     }
     // "Test" checks the three things the app uses: address search, searching along a route, and truck routing.
@@ -2628,6 +2868,54 @@
     document.getElementById('stopFab').onclick = () => stopNav();
     document.getElementById('navBar').onclick = () => { if (!nav.active) document.getElementById('navBar').style.display = 'none'; };
 
+    // ---------- The arrival bar ----------
+    // Shows when you will arrive, or how much time is left (tap the bar to switch), plus the distance left and, if live
+    // traffic is on, how much traffic is adding. While you drive it counts down; before that it assumes you leave now.
+    function etaMode() { try { return localStorage.getItem('etaMode') === 'left' ? 'left' : 'arrive'; } catch (e) { return 'arrive'; } }
+    function clockText(date) { return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }); }
+    function etaNumbers() {
+      if (!currentRoute || !currentTrip) return null;
+      const total = currentRoute.along[currentRoute.along.length - 1] || currentTrip.miles || 1;
+      const fraction = nav.active ? Math.max(0, Math.min(1, (total - currentRoute.along[Math.min(nav.index, currentRoute.along.length - 1)]) / total)) : 1;
+      const seconds = currentTrip.hours * 3600 * fraction;
+      return { seconds, miles: currentTrip.miles * fraction, arrive: new Date(Date.now() + seconds * 1000),
+               delay: currentTrip.delay == null ? null : currentTrip.delay * fraction };
+    }
+    function updateEta() {
+      const info = etaNumbers();
+      if (!info) return;
+      const arrive = 'Arrive ' + clockText(info.arrive), left = formatDuration(info.seconds) + ' left';
+      const arriveIsMain = etaMode() === 'arrive';
+      document.getElementById('etaBig').textContent = arriveIsMain ? arrive : left;
+      document.getElementById('etaSmall').textContent = (arriveIsMain ? formatDuration(info.seconds) + ' left' : arrive) + ' · ' + info.miles.toFixed(0) + ' mi';
+      const delay = document.getElementById('etaDelay');
+      if (info.delay == null) { delay.textContent = ''; delay.className = ''; }
+      else if (info.delay < 120) { delay.textContent = 'No traffic delay'; delay.className = 'ok'; }
+      else { delay.textContent = '+' + Math.round(info.delay / 60) + ' min traffic'; delay.className = 'slow'; }
+    }
+    document.getElementById('etaBar').addEventListener('click', () => {
+      try { localStorage.setItem('etaMode', etaMode() === 'arrive' ? 'left' : 'arrive'); } catch (e) { }
+      updateEta();
+    });
+    setInterval(() => { if (currentRoute) updateEta(); }, 30000);      // keep the clock time current
+
+    // ---------- Posted speed limit sign ----------
+    // The limit comes from HERE's route data (the free router doesn't have it, so no sign appears then).
+    function postedLimitAt(index) {
+      const list = currentRoute && currentRoute.speeds;
+      if (!list || !list.length || index < list[0].i) return null;
+      let lo = 0, hi = list.length - 1;
+      while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (list[mid].i <= index) lo = mid; else hi = mid - 1; }
+      return list[lo].mph;
+    }
+    function updateSpeedSign() {
+      const limit = postedLimitAt(nav.index), cap = Number(document.getElementById('maxSpeedBox').value) || 0;
+      document.getElementById('speedSign').hidden = !limit;
+      if (limit) document.getElementById('speedNum').textContent = limit;
+      document.getElementById('capSign').hidden = !cap;
+      if (cap) document.getElementById('capNum').textContent = cap;
+    }
+
     // ---------- Show my location when the app opens ----------
     // Asks the phone for its position once (the phone shows its own "Allow location?" question the first time), puts a
     // blue dot on the map and zooms there. If you say no, or the position can't be found, the map just stays as it was.
@@ -2650,6 +2938,7 @@
       }, () => { /* location blocked or unavailable: leave the map as it is */ }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
     }
     showMyLocationOnOpen();
+    setTimeout(offerToResumeTrip, 1200);       // if a trip was in progress when the app was closed, offer to carry on
   </script>
 </body>
 </html>
