@@ -198,6 +198,7 @@
     #brand .logo .ic { width: 18px; height: 18px; }
     #installButton, .themeToggle { display: inline-flex; align-items: center; gap: 6px; }
     #installButton .ic, .themeToggle .ic { width: 18px; height: 18px; }
+    #installX { margin-left: 6px; padding: 0 4px; opacity: .65; font-size: 13px; }
     .chip { display: inline-flex; align-items: center; gap: 6px; }
     .chip .ic { width: 16px; height: 16px; }
     .ic.star.on { fill: #f5a623; stroke: #f5a623; }
@@ -270,7 +271,7 @@
       <div id="brandRow">
         <span id="brand"><span class="logo"><svg class="ic fill"><use href="#i-nav"/></svg></span><span>Truck<b>Route</b></span></span>
         <span id="brandButtons">
-          <button id="installButton" hidden><svg class="ic"><use href="#i-download"/></svg>Install</button>
+          <button id="installButton" hidden><svg class="ic"><use href="#i-download"/></svg>Install<span id="installX" title="Hide this button" aria-label="Hide the install button">✕</span></button>
           <button id="themeButton" class="themeToggle" title="Light / dark mode" aria-label="Switch light or dark mode"><svg class="ic"><use href="#i-contrast"/></svg></button>
         </span>
       </div>
@@ -1907,20 +1908,30 @@
       navigator.serviceWorker.register('sw.js').catch(() => { /* not fatal: the app still works without it */ });
     }
     // 2) Android and desktop Chrome: the browser says "this can be installed" - we show our own Install button.
+    // The Install button is only for people who have NOT installed the app. It never shows when the app is already
+    // running as an installed app, and the little X on it hides it for good on this device.
+    const runningAsApp = ['standalone', 'fullscreen', 'minimal-ui'].some(mode => window.matchMedia('(display-mode: ' + mode + ')').matches) ||
+                         navigator.standalone === true || document.referrer.startsWith('android-app://');
+    function installHidden() { try { return localStorage.getItem('installHidden') === '1'; } catch (e) { return false; } }
+    function hideInstallForever() {
+      try { localStorage.setItem('installHidden', '1'); } catch (e) { }
+      document.getElementById('installButton').hidden = true;
+    }
     let installPrompt = null;
     window.addEventListener('beforeinstallprompt', (event) => {
       event.preventDefault();               // hold the browser's own prompt so we can show it from our button
       installPrompt = event;
-      document.getElementById('installButton').hidden = false;
+      if (!runningAsApp && !installHidden()) document.getElementById('installButton').hidden = false;
     });
-    document.getElementById('installButton').onclick = async () => {
+    document.getElementById('installButton').onclick = async (event) => {
+      if (event.target.closest('#installX')) { hideInstallForever(); return; }     // the X: never show this button again
       if (!installPrompt) return;
       installPrompt.prompt();
       await installPrompt.userChoice;
       installPrompt = null;
       document.getElementById('installButton').hidden = true;
     };
-    window.addEventListener('appinstalled', () => { document.getElementById('installButton').hidden = true; });
+    window.addEventListener('appinstalled', hideInstallForever);
     // 3) iPhone/iPad: Apple gives websites no install button, so we show a short how-to instead (once).
     const onIos = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
     const alreadyInstalled = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
