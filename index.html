@@ -21,9 +21,7 @@
     (function () {
       var theme = 'light';
       try {
-        theme = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-        if (localStorage.getItem('truckroute-basemap') === 'satellite') theme = 'light';     // satellite view always starts in light mode
-      } catch (e) { }
+        theme = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');      } catch (e) { }
       document.documentElement.setAttribute('data-theme', theme);
     })();
   </script>
@@ -551,14 +549,9 @@
     }
     L.control.layers({ 'Street map': streetMap, 'Satellite': satelliteMap }, null, { position: 'bottomleft' }).addTo(map);
     try { if (localStorage.getItem('truckroute-basemap') === 'satellite') { map.removeLayer(streetMap); satelliteMap.addTo(map); } } catch (e) { }
-    // Satellite view always uses light mode. Going back to the street map restores the light/dark mode you had chosen.
-    map.on('baselayerchange', (e) => {
-      const satellite = e.name === 'Satellite';
-      try { localStorage.setItem('truckroute-basemap', satellite ? 'satellite' : 'street'); } catch (x) { }
-      let chosen = 'light';
-      try { chosen = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'); } catch (x) { }
-      applyTheme(satellite ? 'light' : chosen, false);      // false = don't overwrite the mode you chose
-    });
+    // Remember which map you chose. Only the MAP changes with this: satellite pictures always show in their true (light)
+    // colors, even in dark mode. The rest of the app (cards, dock, menus) stays in the light/dark mode you picked.
+    map.on('baselayerchange', (e) => { try { localStorage.setItem('truckroute-basemap', e.name === 'Satellite' ? 'satellite' : 'street'); } catch (x) { } });
 
     // We keep the route line and pins in one "layer group" so we can clear them before drawing a new route.
     const routeStuff = L.layerGroup().addTo(map);

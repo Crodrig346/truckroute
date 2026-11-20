@@ -1,9 +1,9 @@
-// TruckRoute "service worker": a helper that runs in the background of the browser.
+﻿// TruckRoute "service worker": a helper that runs in the background of the browser.
 // Its job here is to keep a copy of the app itself (the page, icons and map library) on the phone,
 // so the app opens instantly and even opens with no signal.
 // It does NOT store routes, stops or map pictures - those always come live from the internet.
 
-const CACHE = 'truckroute-v25';   // change this number whenever the app files change, to force an update
+const CACHE = 'truckroute-v26';   // change this number whenever the app files change, to force an update
 const LEAFLET = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/';
 const APP_FILES = ['./', 'index.html', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png',
   // the map library and its little pictures (pins, buttons), saved up front so the app can start with no signal
