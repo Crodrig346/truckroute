@@ -235,9 +235,24 @@
     body.driving #driveHead { display: block; }
     #dhCity { font-size: 24px; font-weight: 800; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     #dhMeta { font-size: 15px; font-weight: 600; color: var(--muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #dhMeta:empty { display: none; }
     /* Short status messages while driving ("Off route", "New route ready", "Waiting for GPS") appear as a small note under the header */
     #navBar { display: none; position: absolute; z-index: 1300; left: 10px; right: 10px; top: calc(var(--head-h, 0px) + 10px);
               background: #10131a; color: #fff; border-radius: 14px; padding: 10px 14px; font-size: 16px; font-weight: 700; line-height: 1.25; box-shadow: var(--shadow); }
+    /* Heading-up map: the map is made bigger than the screen and turned, so its corners never show. */
+    #mapUI { display: none; position: absolute; z-index: 5; pointer-events: none; }
+    body.headingUp #mapUI { display: block; }
+    #map { will-change: transform; }
+    /* Pins and popups are turned back the other way so they stay upright on the turned map. */
+    body.headingUp .leaflet-marker-icon { rotate: var(--unrot, 0deg); transform-origin: 50% 100%; transition: rotate .5s linear; }
+    body.headingUp .leaflet-marker-icon.leaflet-div-icon, body.headingUp .leaflet-marker-icon:not(img) { transform-origin: 50% 50%; }
+    body.headingUp .leaflet-popup { rotate: var(--unrot, 0deg); transform-origin: 50% 100%; }
+    /* The compass: shows where north is. Tap it to switch between heading-up and north-up. */
+    #compassBtn { display: none; position: absolute; z-index: 1130; right: 12px; top: calc(var(--head-h, 0px) + 12px); width: 46px; height: 46px; padding: 3px;
+                  border: 0; border-radius: 50%; background: var(--card); color: var(--text); box-shadow: var(--shadow); }
+    body.driving #compassBtn { display: block; }
+    #compassBtn svg { width: 100%; height: 100%; }
+    #compassNeedle { transform-origin: 20px 20px; }
     /* The stop-driving button: a round red icon (a white square, like a "stop" button) at the bottom right of the map */
     #stopFab { display: none; position: absolute; z-index: 1300; right: 12px; bottom: calc(var(--sheet-h) + 22px); width: 54px; height: 54px;
                border: 0; border-radius: 50%; background: #dc2626; color: #fff; padding: 0; align-items: center; justify-content: center; box-shadow: var(--shadow); }
@@ -334,6 +349,11 @@
   </svg>
   <div id="app">
     <div id="map"></div>
+    <!-- While the map is turned to follow your heading, the map's own buttons are moved here so they stay upright -->
+    <div id="mapUI"></div>
+    <button id="compassBtn" title="Switch between heading-up and north-up" aria-label="Switch between heading-up and north-up map">
+      <svg viewBox="0 0 40 40" aria-hidden="true"><g id="compassNeedle"><path d="M20 5l6 15H14z" fill="#dc2626"/><path d="M20 35l-6-15h12z" fill="#9aa4b2"/></g><text x="20" y="4.6" text-anchor="middle" font-size="7" font-weight="800" fill="currentColor">N</text></svg>
+    </button>
 
     <!-- The search card -->
     <div id="search">
@@ -450,7 +470,7 @@
               <label>Your top speed (mph) <input id="maxSpeedBox" type="number" step="1" min="30" max="85" placeholder="no limit"></label>
               <small class="wide">If your truck is governed (for example at 65 mph), enter it. Arrival times are worked out as if you never go faster than this, even where the posted limit is higher. Leave blank for none.</small>
               <label>List stops by
-                <select id="sortBox"><option value="mile">Mile marker</option><option value="price">Cheapest diesel</option></select>
+                <select id="sortBox"><option value="mile">Order along route</option><option value="price">Cheapest diesel</option></select>
               </label>
               <label class="check wide"><input id="hazmatBox" type="checkbox"> Hazmat load</label>
             </div>
@@ -634,7 +654,71 @@
     function syncRecenterTile() {
       const tile = document.getElementById('recenterTile');
       if (tile) tile.classList.toggle('on', !!(nav.active && !nav.follow));
+      updateRotation();
     }
+
+    // ---------- Heading-up map ----------
+    // While you drive (and the map is following you) the map turns so the direction you are heading points up.
+    // Leaflet cannot turn a map by itself, so the map's box is made larger than the screen (so the corners never show)
+    // and turned with CSS. The map's own buttons are moved out of it so they stay upright. If you move or zoom the map
+    // yourself, it goes back to north-up (so touch gestures behave normally) until you tap the re-center tile.
+    const rot = { on: false, shown: 0, heading: null };
+    function rotateMode() { try { return localStorage.getItem('mapRotate') === 'north' ? 'north' : 'heading'; } catch (e) { return 'heading'; } }
+    function layoutRotatedMap() {
+      const mapEl = document.getElementById('map'), ui = document.getElementById('mapUI'), app = document.getElementById('app');
+      mapEl.style.cssText = '';                                              // measure the normal box first
+      const b = mapEl.getBoundingClientRect(), a = app.getBoundingClientRect();
+      const D = Math.ceil(Math.hypot(b.width, b.height));                    // big enough that any turn still covers the screen
+      const cx = b.left - a.left + b.width / 2, cy = b.top - a.top + b.height / 2;
+      Object.assign(mapEl.style, { position: 'absolute', inset: 'auto', margin: '0', left: (cx - D / 2) + 'px', top: (cy - D / 2) + 'px', width: D + 'px', height: D + 'px', transformOrigin: '50% 50%' });
+      Object.assign(ui.style, { left: (b.left - a.left) + 'px', top: (b.top - a.top) + 'px', width: b.width + 'px', height: b.height + 'px' });
+      mapEl.style.transform = 'rotate(' + (-rot.shown) + 'deg)';
+      map.invalidateSize({ pan: false });
+    }
+    function applyRotation(animate) {
+      const mapEl = document.getElementById('map');
+      mapEl.style.transition = animate ? 'transform .6s linear' : 'none';
+      if (rot.on) mapEl.style.transform = 'rotate(' + (-rot.shown) + 'deg)';
+      document.documentElement.style.setProperty('--unrot', rot.shown + 'deg');
+      const needle = document.getElementById('compassNeedle');
+      if (needle) needle.style.transform = 'rotate(' + (-rot.shown) + 'deg)';
+    }
+    function updateRotation() {
+      const mapEl = document.getElementById('map'), ui = document.getElementById('mapUI');
+      const want = nav.active && nav.follow && rotateMode() === 'heading';
+      if (want && !rot.on) {
+        rot.on = true; document.body.classList.add('headingUp');
+        ui.appendChild(map.getContainer().querySelector('.leaflet-control-container'));      // buttons out of the turning box
+        layoutRotatedMap();
+      } else if (!want && rot.on) {
+        rot.on = false; document.body.classList.remove('headingUp');
+        mapEl.appendChild(ui.querySelector('.leaflet-control-container'));                  // buttons back where they were
+        mapEl.style.cssText = ''; rot.shown = 0;
+        map.invalidateSize({ pan: false });
+      }
+      if (want && rot.heading != null) {                                    // turn the shortest way round
+        const delta = (((rot.heading - rot.shown) % 360) + 540) % 360 - 180;
+        rot.shown += delta;
+        applyRotation(true);
+      } else if (!want) applyRotation(false);
+    }
+    // The direction of the road just ahead (from the route line), in degrees clockwise from north.
+    function routeBearingAt(index) {
+      const p = currentRoute && currentRoute.path; if (!p) return null;
+      let j = index, d = 0;
+      while (j < p.length - 1 && d < 0.08) { d += miles(p[j], p[j + 1]); j++; }      // look about 130 m (0.08 mi) ahead
+      if (j === index) return null;
+      const a = p[index], b = p[j], r = Math.PI / 180;
+      const y = Math.sin((b[1] - a[1]) * r) * Math.cos(b[0] * r);
+      const x = Math.cos(a[0] * r) * Math.sin(b[0] * r) - Math.sin(a[0] * r) * Math.cos(b[0] * r) * Math.cos((b[1] - a[1]) * r);
+      return (Math.atan2(y, x) / r + 360) % 360;
+    }
+    document.getElementById('compassBtn').addEventListener('click', () => {
+      try { localStorage.setItem('mapRotate', rotateMode() === 'heading' ? 'north' : 'heading'); } catch (e) { }
+      if (nav.active) nav.follow = true;
+      syncRecenterTile();
+    });
+    window.addEventListener('resize', () => { if (rot.on) layoutRotatedMap(); });
     function recenterOnMe() {
       if (nav.active) {                                       // driving: back to following the truck
         nav.follow = true; syncRecenterTile();
@@ -1408,7 +1492,7 @@
         row.prepend(badgeElement(tooLowForYou ? 'danger' : s.kind, 'row'));   // the colored round icon at the left
         const detail = document.createElement('small');
         detail.textContent = (s.place ? s.place + ' · ' : '') + (s.exit ? 'Exit ' + s.exit + ' · ' : '') +
-                            'mile ' + s.mile.toFixed(0) + ' - ' + s.away.toFixed(1) + ' mi off route' + priceText(s, cheapestKey) +
+                            s.away.toFixed(1) + ' mi off route' + priceText(s, cheapestKey) +
                             (s.kind === 'scale' ? ' - open/closed status not available' : '') +
                             (s.kind === 'parking' && s.tags['capacity:hgv'] ? ' - ' + s.tags['capacity:hgv'] + ' truck spaces' : '') +
                             (s.kind === 'bridge' ? ' - clearance ' + fmtFt(s.clearance) + (tooLowForYou ? ' - LOWER than your truck!' : ' - tight for your truck') : '');
@@ -1508,12 +1592,12 @@
         const stop = bestStopFor(ev);
         const row = document.createElement('div');
         row.className = 'item ' + ev.kind;
-        row.textContent = (ev.kind === 'rest10' ? '10-hour rest' : '30-minute break') + ' around mile ' + ev.mile.toFixed(0) + ' - ' + when(ev.time);
+        row.textContent = (ev.kind === 'rest10' ? '10-hour rest' : '30-minute break') + ' - ' + when(ev.time);
         const why = document.createElement('small');
         why.textContent = ev.why;
         row.appendChild(why);
         const suggestion = document.createElement('small');
-        if (stop) suggestion.textContent = 'Best stop: ' + stop.name + ' (' + NAMES[stop.kind].toLowerCase() + ', mile ' + stop.mile.toFixed(0) + ', ' + (ev.mile - stop.mile).toFixed(0) + ' miles before your limit)';
+        if (stop) suggestion.textContent = 'Best stop: ' + stop.name + ' (' + NAMES[stop.kind].toLowerCase() + (stop.place ? ', ' + stop.place : '') + ', ' + (ev.mile - stop.mile).toFixed(0) + ' miles before your limit)';
         else suggestion.textContent = currentStops.length ? 'No truck stop or rest area found before this point - plan ahead!' : 'Stops are still loading...';
         row.appendChild(suggestion);
         row.style.cursor = stop ? 'pointer' : 'default';
@@ -1680,15 +1764,35 @@
       document.getElementById('pageTitle').textContent = PAGE_TITLES[which] || '';
       document.getElementById('panes').scrollTop = 0;
     }
-    function closePage() {
+    // ----- The phone's Back button -----
+    // A menu that opens full-page adds one entry to the browser's history, so the Back button closes the menu instead of
+    // leaving the app. While you are driving, one extra "guard" entry makes Back ask you to use the stop button instead of quitting.
+    const hist = { menu: false, guard: false, skip: 0 };
+    function histPush(tag) { try { history.pushState({ tr: tag }, ''); } catch (e) { } }
+    function histBack() { hist.skip++; try { history.back(); } catch (e) { hist.skip--; } }      // our own Back: its popstate is ignored
+    window.addEventListener('popstate', () => {
+      if (hist.skip > 0) { hist.skip--; return; }
+      if (hist.menu) { hist.menu = false; closePageUI(); return; }                           // Back closes the open menu
+      if (hist.guard && nav.active) { histPush('guard'); navNote('Tap the red button to stop navigating'); return; }    // driving: don't quit by accident
+      if (hist.guard) hist.guard = false;
+    });
+    function closePageUI() {
       delete document.body.dataset.page;
       if (isPhone()) for (const tabId of Object.values(PAGE_TABS)) document.getElementById(tabId).className = '';
+    }
+    function closePage() {
+      if (hist.menu) { hist.menu = false; histBack(); }
+      closePageUI();
     }
     function showTab(which) {
       if (isPhone() && document.body.dataset.page === 'open' && currentPage === which) { closePage(); return; }
       selectPage(which);
       document.body.dataset.page = 'open';
+      if (isPhone() && !hist.menu) { histPush('menu'); hist.menu = true; }
     }
+    // Called when driving starts / stops (a short delay lets any menu that is closing finish its own Back first).
+    function addDriveGuard() { setTimeout(() => { if (nav.active && !hist.guard) { histPush('guard'); hist.guard = true; } }, 350); }
+    function removeDriveGuard() { if (hist.guard) { hist.guard = false; histBack(); } }
     document.getElementById('pageBack').onclick = closePage;
     document.getElementById('pageClose').onclick = closePage;
     for (const [name, tabId] of Object.entries(PAGE_TABS)) document.getElementById(tabId).onclick = () => showTab(name);
@@ -1708,7 +1812,7 @@
       new ResizeObserver(() => {
         const head = document.getElementById('driveHead');
         document.body.style.setProperty('--head-h', (getComputedStyle(head).display === 'none' ? 0 : head.offsetHeight) + 'px');
-        setTimeout(() => map.invalidateSize(), 50);
+        setTimeout(() => { if (rot.on) layoutRotatedMap(); else map.invalidateSize(); }, 50);
       }).observe(document.getElementById('driveHead'));
       new ResizeObserver(sync).observe(document.getElementById('etaBar'));
       new ResizeObserver(sync).observe(document.getElementById('sheet'));
@@ -1875,6 +1979,7 @@
     }
     // Tap anywhere on the map to drop a pin: great for a dock, a yard or a spot with no address.
     map.on('click', (event) => {
+      if (rot.on) return;                       // while the map is turned, taps are positioned wrongly: no pin dropping then
       const { lat, lng } = event.latlng;
       const label = 'Pin ' + lat.toFixed(5) + ', ' + lng.toFixed(5);
       const box = document.createElement('div');
@@ -1931,7 +2036,7 @@
     // a point on the route line. For live navigation we watch your GPS position, work out where you are on
     // the line, and tell you what's coming next - on screen and out loud.
     let currentRoute = null;         // {path: route points, along: miles at each point, maneuvers: steps}
-    const nav = { active: false, watchId: null, index: 0, spoken: {}, lastReroute: 0, rerouting: false, wakeLock: null, follow: true, last: null, lastFixAt: 0, noteAt: 0, arrived: false, hiddenAt: 0, startWhenReady: false };
+    const nav = { active: false, watchId: null, index: 0, spoken: {}, lastReroute: 0, rerouting: false, wakeLock: null, follow: true, last: null, lastFixAt: 0, noteAt: 0, arrived: false, savedAt: 0, hiddenAt: 0, startWhenReady: false };
     let youMarker = null;
 
     function cumulativeMiles(path) {
@@ -1988,12 +2093,16 @@
       if (away > 0.3) { offRoute(lat, lon); return; }
       nav.index = index;
       updateEta(); updateSpeedSign();
+      const roadDirection = routeBearingAt(index);                 // turn the map so the road ahead points up
+      if (roadDirection != null) rot.heading = roadDirection;
+      updateRotation();
 
       // Show your position on the map.
       const firstFix = !youMarker;
       if (firstFix) youMarker = L.circleMarker([lat, lon], { radius: 9, color: '#fff', weight: 3, fillColor: '#2563eb', fillOpacity: 1 }).addTo(map);
       youMarker.setLatLng([lat, lon]);
       nav.last = [lat, lon]; nav.lastFixAt = Date.now();    // remembered so the re-center tile knows where you are
+      if (Date.now() - (nav.savedAt || 0) > 60000) { nav.savedAt = Date.now(); rememberTrip(); }      // "still driving" stamp, about once a minute
       // The map follows the truck only until you move or zoom it yourself. Then it stays exactly where you put it,
       // until you tap the re-center tile.
       if (nav.follow) {
@@ -2075,7 +2184,8 @@
       const place = [placeNow.city, placeNow.state].filter(Boolean).join(', ');
       document.getElementById('dhCity').textContent = place || 'Finding your location...';
       const county = countyName(placeNow.county, placeNow.state);
-      document.getElementById('dhMeta').textContent = (county ? county + ' · ' : '') + 'Mile ' + Math.round(along[Math.min(index, along.length - 1)]) + ' / ' + Math.round(total);
+      // (Real highway mile markers will be added later. Trip miles are not shown anywhere.)
+      document.getElementById('dhMeta').textContent = county;
     }
 
     // You've left the route: ask for a new route starting from where you are.
@@ -2105,6 +2215,7 @@
       await keepScreenAwake();
       startWatching();
       rememberTrip();
+      addDriveGuard();
     }
     // Ask the phone to keep the screen on while driving. The phone cancels this whenever the app goes out of view
     // (screen lock, switching apps), so it has to be asked again every time you come back.
@@ -2165,11 +2276,13 @@
       try { localStorage.setItem('tripInProgress', JSON.stringify({ endText: lastSearch.endText, end: lastSearch.end, t: Date.now() })); } catch (e) { }
     }
     function forgetTrip() { try { localStorage.removeItem('tripInProgress'); } catch (e) { } }
+    // No question is asked: if you were driving a few minutes ago, the app simply carries on. The saved time is refreshed
+    // about once a minute while driving, so a trip you left long ago (or forgot to end) is not started again by surprise.
     function offerToResumeTrip() {
       let saved = null;
       try { saved = JSON.parse(localStorage.getItem('tripInProgress')); } catch (e) { }
-      if (!saved || !saved.end || Date.now() - saved.t > 8 * 3600 * 1000) { forgetTrip(); return; }
-      if (!confirm('Carry on with your trip to ' + saved.endText + '?\n\nThe route will be worked out again from where you are now.')) { forgetTrip(); return; }
+      if (!saved || !saved.end || Date.now() - saved.t > 45 * 60 * 1000) { forgetTrip(); return; }
+      navNote('Resuming your trip to ' + saved.endText + '...');
       knownPlaces[saved.endText] = saved.end;
       document.getElementById('endBox').value = saved.endText;
       document.getElementById('startBox').value = 'My location'; syncStartUI();
@@ -2179,6 +2292,7 @@
     function stopNav() {
       nav.active = false; nav.follow = true;
       forgetTrip();
+      removeDriveGuard();
       syncRecenterTile();
       if (currentRoute) updateEta();
       document.body.classList.remove('driving');
