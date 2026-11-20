@@ -422,10 +422,22 @@
   <script>
     // ---------- The map (same as step 1) ----------
     const map = L.map('map').setView([39.5, -98.35], 4);
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    const streetMap = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
       attribution: '© OpenStreetMap contributors'
     }).addTo(map);
+    // Satellite pictures (free Esri World Imagery) with road and town names drawn on top. Switch with the layers button on the map.
+    // NOTE: fine for testing; check Esri's terms (or switch to a paid imagery provider) before selling the app in the stores.
+    const satelliteMap = L.layerGroup([
+      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        maxZoom: 19, attribution: 'Imagery © Esri, Maxar, Earthstar Geographics'
+      }),
+      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19 }),
+      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19 })
+    ]);
+    L.control.layers({ 'Street map': streetMap, 'Satellite': satelliteMap }, null, { position: 'topright' }).addTo(map);
+    try { if (localStorage.getItem('truckroute-basemap') === 'satellite') { map.removeLayer(streetMap); satelliteMap.addTo(map); } } catch (e) { }
+    map.on('baselayerchange', (e) => { try { localStorage.setItem('truckroute-basemap', e.name === 'Satellite' ? 'satellite' : 'street'); } catch (x) { } });
 
     // We keep the route line and pins in one "layer group" so we can clear them before drawing a new route.
     const routeStuff = L.layerGroup().addTo(map);
@@ -1438,6 +1450,12 @@
       list.innerHTML = '<div class="choice"><small>Searching...</small></div>';
       try {
         const results = await searchPlaces(text);
+        // A full street address with an exact match: go straight to it (pin + zoom) instead of making you tap it.
+        const typedNumber = (text.match(/^\s*(\d+)/) || [])[1];
+        if (typedNumber && results.length && results[0].precise && new RegExp('(^|[ ,])' + typedNumber + '\\b').test(results[0].label)) {
+          choosePlace(which, results[0]);
+          return;
+        }
         list.innerHTML = '';
         let heading = 'Tap the right one (pin icon = exact spot, buildings icon = middle of a town):';
         let places = results;
@@ -1909,6 +1927,13 @@
         const start = await resolvePlace(startText);
         const end = await resolvePlace(endText);
         lastSearch = { startText, endText, start, end };   // remembered so you can save the trip
+        // Make sure both places show as pins on the map, even if you typed them instead of picking from the list.
+        for (const [which, text, spot] of [['start', startText, start], ['end', endText, end]]) {
+          if (!previewMarkers[which]) {
+            previewMarkers[which] = L.marker([spot.lat, spot.lon]).addTo(previewLayer)
+              .bindPopup((which === 'start' ? 'Start: ' : 'Destination: ') + text.replace(/</g, '&lt;'));
+          }
+        }
         document.getElementById('choices').style.display = 'none';
         // If you typed a street address but we could only match the town, say so (see the note after the route).
         const looksLikeAddress = t => /^\d+\s/.test(t);
