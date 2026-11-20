@@ -22,6 +22,7 @@
       var theme = 'light';
       try {
         theme = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+        if (localStorage.getItem('truckroute-basemap') === 'satellite') theme = 'light';     // satellite view always starts in light mode
       } catch (e) { }
       document.documentElement.setAttribute('data-theme', theme);
     })();
@@ -475,6 +476,36 @@
       streetMap = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap contributors' });
     }
     streetMap.addTo(map);
+    // Tidy up the street map: hide the small stuff (minor street names, path names, neighborhood names, building outlines)
+    // and add a little color (soft green parks and woods, blue water, pale yellow highways), like Google's map.
+    // The colors are kept light so the orange route line still stands out.
+    function tuneStreetStyle(gl) {
+      const hide = ['highway-name-path', 'highway-name-minor', 'label_other', 'building', 'waterway_line_label', 'highway_path'];
+      for (const id of hide) if (gl.getLayer(id)) gl.setLayoutProperty(id, 'visibility', 'none');
+      const paint = {
+        'background': ['background-color', '#f3f1ec'],
+        'park': ['fill-color', '#cde8c4'],
+        'landcover_wood': ['fill-color', '#d3e8c9'],
+        'landuse_residential': ['fill-color', '#eeece6'],
+        'water': ['fill-color', '#a9d3ee'],
+        'waterway': ['line-color', '#a9d3ee'],
+        'water_name_point_label': ['text-color', '#4b7fa8'],
+        'water_name_line_label': ['text-color', '#4b7fa8'],
+        'highway_motorway_inner': ['line-color', '#fbeab9'],
+        'highway_motorway_bridge_inner': ['line-color', '#fbeab9'],
+        'highway_motorway_casing': ['line-color', '#e3c77f'],
+        'highway_motorway_bridge_casing': ['line-color', '#e3c77f']
+      };
+      for (const [id, [prop, color]] of Object.entries(paint)) if (gl.getLayer(id)) gl.setPaintProperty(id, prop, color);
+      if (gl.getLayer('label_village')) gl.setLayerZoomRange('label_village', 11, 24);      // tiny towns only when zoomed in
+    }
+    try {
+      if (typeof streetMap.getMaplibreMap === 'function') {
+        const gl = streetMap.getMaplibreMap();
+        gl.on('style.load', () => tuneStreetStyle(gl));
+        if (gl.isStyleLoaded()) tuneStreetStyle(gl);
+      }
+    } catch (e) { }
     function setStreetStyle(dark) { document.documentElement.classList.toggle('darkMap', dark); }
     // Satellite pictures (free Esri World Imagery) with road and town names drawn on top. Switch with the layers button on the map.
     // NOTE: fine for testing; check Esri's terms (or switch to a paid imagery provider) before selling the app in the stores.
@@ -520,7 +551,14 @@
     }
     L.control.layers({ 'Street map': streetMap, 'Satellite': satelliteMap }, null, { position: 'bottomleft' }).addTo(map);
     try { if (localStorage.getItem('truckroute-basemap') === 'satellite') { map.removeLayer(streetMap); satelliteMap.addTo(map); } } catch (e) { }
-    map.on('baselayerchange', (e) => { try { localStorage.setItem('truckroute-basemap', e.name === 'Satellite' ? 'satellite' : 'street'); } catch (x) { } });
+    // Satellite view always uses light mode. Going back to the street map restores the light/dark mode you had chosen.
+    map.on('baselayerchange', (e) => {
+      const satellite = e.name === 'Satellite';
+      try { localStorage.setItem('truckroute-basemap', satellite ? 'satellite' : 'street'); } catch (x) { }
+      let chosen = 'light';
+      try { chosen = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'); } catch (x) { }
+      applyTheme(satellite ? 'light' : chosen, false);      // false = don't overwrite the mode you chose
+    });
 
     // We keep the route line and pins in one "layer group" so we can clear them before drawing a new route.
     const routeStuff = L.layerGroup().addTo(map);
@@ -2567,14 +2605,14 @@
     document.getElementById('search').addEventListener('focusin', () => document.getElementById('search').classList.remove('compact'));
 
     // Light / dark mode: remembered on this device. The page picks your phone's setting the first time.
-    function applyTheme(theme) {
+    function applyTheme(theme, remember = true) {
       document.documentElement.setAttribute('data-theme', theme);
       setStreetStyle(theme === 'dark');      // light or dark street map
       const color = theme === 'dark' ? '#181d25' : '#f5a623';
       document.querySelector('meta[name=theme-color]').setAttribute('content', color);
-      try { localStorage.setItem('theme', theme); } catch (e) { }
+      if (remember) { try { localStorage.setItem('theme', theme); } catch (e) { } }
     }
-    applyTheme(document.documentElement.getAttribute('data-theme') || 'light');
+    applyTheme(document.documentElement.getAttribute('data-theme') || 'light', false);
     document.querySelectorAll('.themeToggle').forEach(button => {
       button.onclick = () => applyTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
     });
