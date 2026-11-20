@@ -89,11 +89,19 @@
     body[data-sheet="full"] { --sheet-h: var(--sheet-full); }
     #handle { flex: none; height: 26px; display: flex; align-items: center; justify-content: center; cursor: grab; touch-action: none; }
     #handle span { width: 44px; height: 5px; border-radius: 3px; background: var(--line); }
-    #summary { flex: none; padding: 0 16px 8px; max-height: 96px; overflow-y: auto; }
+    #summary { flex: none; padding: 0 16px 8px; max-height: 170px; overflow-y: auto; }
     #message { font-size: 15px; font-weight: 600; }
     #fuelLine { font-size: 13px; color: var(--muted); margin-top: 2px; }
     #warnLine { font-size: 13px; font-weight: 700; color: var(--warn); margin-top: 2px; }
     #fuelLine:empty, #warnLine:empty { display: none; }
+    /* The route choice cards (Fastest, Shortest, Fuel saver...) */
+    #routeOptions { display: none; gap: 8px; overflow-x: auto; padding: 8px 0 4px; -webkit-overflow-scrolling: touch; }
+    #routeOptions.show { display: flex; }
+    .routeCard { flex: none; min-width: 132px; text-align: left; border: 2px solid var(--line); background: var(--field); border-radius: 12px; padding: 7px 10px; }
+    .routeCard.on { border-color: var(--accent); background: var(--tip-bg); }
+    .routeCard b { display: block; font-size: 13px; }
+    .routeCard span { display: block; font-size: 15px; font-weight: 800; }
+    .routeCard small { margin-top: 0; font-size: 12px; }
 
     /* The tab bar */
     #tabs { flex: none; display: grid; grid-template-columns: repeat(5, 1fr); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
@@ -149,9 +157,10 @@
     #settings { padding: 12px 16px 28px; }
     #settings section { margin-bottom: 20px; }
     #settings h3 { margin: 0 0 8px; font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
-    #truck, #hours { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-    #truck label, #hours label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
-    #truck input[type=number], #hours input, #truck select { height: 44px; width: 100%; border: 1px solid var(--line); background: var(--field); border-radius: 10px; padding: 0 10px; font-size: 16px; }
+    #truck, #hours, #prefs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    #truck label, #hours label, #prefs label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+    #prefs label.check { flex-direction: row; align-items: center; gap: 10px; color: var(--text); font-size: 15px; }
+    #truck input[type=number], #hours input, #truck select, #prefs select { height: 44px; width: 100%; border: 1px solid var(--line); background: var(--field); border-radius: 10px; padding: 0 10px; font-size: 16px; }
     .wide { grid-column: 1 / -1; }
     #truck label.check { flex-direction: row; align-items: center; gap: 10px; color: var(--text); font-size: 15px; }
     #truck label.check input { width: 22px; height: 22px; }
@@ -176,6 +185,34 @@
     #iosHint button { margin-left: 8px; padding: 4px 12px; border: 0; border-radius: 8px; background: var(--accent); font-weight: 700; }
 
     .pin { font-size: 22px; text-shadow: 0 1px 3px #000; }
+
+    /* ---------- Icons ---------- */
+    .ic { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; vertical-align: middle; }
+    .ic.fill { fill: currentColor; stroke: none; }
+    #tabs .ico { display: flex; }
+    #tabs .ico .ic { width: 23px; height: 23px; }
+    #tabs button.active .ico .ic { stroke: var(--accent); }
+    .iconBtn .ic { width: 21px; height: 21px; color: var(--muted); }
+    #brand { display: flex; align-items: center; gap: 8px; }
+    #brand .logo { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 9px; background: var(--accent); color: var(--accent-ink); }
+    #brand .logo .ic { width: 18px; height: 18px; }
+    #installButton, .themeToggle { display: inline-flex; align-items: center; gap: 6px; }
+    #installButton .ic, .themeToggle .ic { width: 18px; height: 18px; }
+    .chip { display: inline-flex; align-items: center; gap: 6px; }
+    .chip .ic { width: 16px; height: 16px; }
+    .ic.star.on { fill: #f5a623; stroke: #f5a623; }
+    #stops button.star .ic { width: 21px; height: 21px; color: var(--muted); }
+    #stops button.price { font-weight: 800; font-size: 17px; color: var(--muted); }
+    /* Round colored badges: used on the map for each kind of stop and at the left of each row in the list */
+    .badge { display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; color: #fff; flex: none; }
+    .badge .ic { stroke: #fff; }
+    .badge.pin { width: 32px; height: 32px; border: 2px solid #fff; box-shadow: 0 2px 7px rgba(0, 0, 0, .4); font-size: 0; text-shadow: none; }
+    .badge.pin .ic { width: 17px; height: 17px; }
+    .badge.row { width: 30px; height: 30px; margin-right: 10px; vertical-align: middle; }
+    .badge.row .ic { width: 17px; height: 17px; }
+    .badge.fav .ic { fill: #fff; }
+    .rowIcon { display: inline-flex; vertical-align: middle; margin-right: 8px; color: var(--muted); }
+    .rowIcon .ic { width: 18px; height: 18px; }
 
     /* Phones: the map's own zoom buttons are hidden (you pinch instead) and its credit line sits above the panel */
     @media (max-width: 899px) {
@@ -202,28 +239,51 @@
   </style>
 </head>
 <body data-sheet="peek">
+  <!-- The icon set: simple line drawings (24 x 24) that every button, tab and map pin draws from. They take the
+       color of the text around them, so they work in light and dark mode. -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+    <defs>
+      <symbol id="i-truck" viewBox="0 0 24 24"><path d="M2 6h11v9H2z"/><path d="M13 9h4.5l3.5 3.5V15h-8z"/><circle cx="6.5" cy="17.5" r="2"/><circle cx="17.5" cy="17.5" r="2"/></symbol>
+      <symbol id="i-fuel" viewBox="0 0 24 24"><path d="M4 21V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v16"/><path d="M3 21h13"/><path d="M7 8h5"/><path d="M14 9h2a2 2 0 0 1 2 2v5a1.5 1.5 0 0 0 3 0V9l-3-3"/></symbol>
+      <symbol id="i-route" viewBox="0 0 24 24"><circle cx="6" cy="18" r="2"/><circle cx="18" cy="4" r="2"/><path d="M8 18h5.5a3.5 3.5 0 0 0 0-7h-3a3.5 3.5 0 0 1 0-7H16"/></symbol>
+      <symbol id="i-star" viewBox="0 0 24 24"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/></symbol>
+      <symbol id="i-bookmark" viewBox="0 0 24 24"><path d="M6 3h12v18l-6-4.5L6 21z"/></symbol>
+      <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></symbol>
+      <symbol id="i-locate" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></symbol>
+      <symbol id="i-nav" viewBox="0 0 24 24"><path d="M12 2.5L4.8 20.5l.8.8L12 18l6.4 3.3.8-.8z" fill="currentColor" stroke="none"/></symbol>
+      <symbol id="i-contrast" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor"/></symbol>
+      <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12"/><path d="M7 11l5 5 5-5"/><path d="M5 20h14"/></symbol>
+      <symbol id="i-parking" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="3"/><path d="M9.5 17V7.5h3.2a2.7 2.7 0 0 1 0 5.4H9.5"/></symbol>
+      <symbol id="i-scale" viewBox="0 0 24 24"><path d="M12 4v16M7 20h10M5 8h14"/><path d="M5 8l-3 7a3 3 0 0 0 6 0zM19 8l-3 7a3 3 0 0 0 6 0z"/></symbol>
+      <symbol id="i-bridge" viewBox="0 0 24 24"><path d="M3 19h18"/><path d="M5 19V8M19 19V8"/><path d="M5 8c2.5 6 11.5 6 14 0"/><path d="M12 14v5"/></symbol>
+      <symbol id="i-rest" viewBox="0 0 24 24"><path d="M5 9h12v5a5 5 0 0 1-5 5h-2a5 5 0 0 1-5-5z"/><path d="M17 11h1.5a2.5 2.5 0 0 1 0 5H17"/><path d="M8 3v2M12 3v2"/></symbol>
+      <symbol id="i-nogo" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M7 12h10"/></symbol>
+      <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s7-5.5 7-11a7 7 0 0 0-14 0c0 5.5 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></symbol>
+      <symbol id="i-city" viewBox="0 0 24 24"><path d="M4 21V8l6-3v16"/><path d="M10 21V11l10 2v8"/><path d="M3 21h18"/><path d="M7 11h.01M7 15h.01M14 16h.01M17 16h.01"/></symbol>
+    </defs>
+  </svg>
   <div id="app">
     <div id="map"></div>
 
     <!-- The search card -->
     <div id="search">
       <div id="brandRow">
-        <span id="brand">🧭 Truck<b>Route</b></span>
+        <span id="brand"><span class="logo"><svg class="ic fill"><use href="#i-nav"/></svg></span><span>Truck<b>Route</b></span></span>
         <span id="brandButtons">
-          <button id="installButton" hidden>📲 Install</button>
-          <button id="themeButton" class="themeToggle" title="Light / dark mode" aria-label="Switch light or dark mode">🌓</button>
+          <button id="installButton" hidden><svg class="ic"><use href="#i-download"/></svg>Install</button>
+          <button id="themeButton" class="themeToggle" title="Light / dark mode" aria-label="Switch light or dark mode"><svg class="ic"><use href="#i-contrast"/></svg></button>
         </span>
       </div>
       <div class="field">
         <span class="dot dotStart"></span>
         <input id="startBox" placeholder="Start address or place" autocomplete="off">
-        <button id="startSearch" class="iconBtn" title="Show matching addresses" aria-label="Search for the start address">🔍</button>
-        <button id="meButton" class="iconBtn" title="Use my current location" aria-label="Use my current location">📍</button>
+        <button id="startSearch" class="iconBtn" title="Show matching addresses" aria-label="Search for the start address"><svg class="ic"><use href="#i-search"/></svg></button>
+        <button id="meButton" class="iconBtn" title="Use my current location" aria-label="Use my current location"><svg class="ic"><use href="#i-locate"/></svg></button>
       </div>
       <div class="field">
         <span class="dot dotEnd"></span>
         <input id="endBox" placeholder="Where to? Address or place" autocomplete="off">
-        <button id="endSearch" class="iconBtn" title="Show matching addresses" aria-label="Search for the destination address">🔍</button>
+        <button id="endSearch" class="iconBtn" title="Show matching addresses" aria-label="Search for the destination address"><svg class="ic"><use href="#i-search"/></svg></button>
       </div>
       <button id="goButton">Find route</button>
       <div id="choices"></div>
@@ -244,15 +304,16 @@
       <div id="handle" role="button" aria-label="Make the panel taller or shorter"><span></span></div>
       <div id="summary">
         <div id="message">Type a start and a destination, then press Find route.</div>
+        <div id="routeOptions"></div>
         <div id="fuelLine"></div>
         <div id="warnLine"></div>
       </div>
       <nav id="tabs">
-        <button id="tabTruck"><span class="ico">🚛</span><span class="lbl">Truck</span></button>
-        <button id="tabStops" class="active"><span class="ico">⛽</span><span class="lbl">Stops</span></button>
-        <button id="tabRoute"><span class="ico">🗺️</span><span class="lbl">Route</span></button>
-        <button id="tabFavs"><span class="ico">⭐</span><span class="lbl">Favs<span id="favCount"></span></span></button>
-        <button id="tabTrips"><span class="ico">💾</span><span class="lbl">Trips<span id="tripCount"></span></span></button>
+        <button id="tabTruck"><span class="ico"><svg class="ic"><use href="#i-truck"/></svg></span><span class="lbl">Truck</span></button>
+        <button id="tabStops" class="active"><span class="ico"><svg class="ic"><use href="#i-fuel"/></svg></span><span class="lbl">Stops</span></button>
+        <button id="tabRoute"><span class="ico"><svg class="ic"><use href="#i-route"/></svg></span><span class="lbl">Route</span></button>
+        <button id="tabFavs"><span class="ico"><svg class="ic"><use href="#i-star"/></svg></span><span class="lbl">Favs<span id="favCount"></span></span></button>
+        <button id="tabTrips"><span class="ico"><svg class="ic"><use href="#i-bookmark"/></svg></span><span class="lbl">Trips<span id="tripCount"></span></span></button>
       </nav>
 
       <div id="panes">
@@ -260,12 +321,12 @@
           <div id="stopTools">
             <input id="stopSearch" type="search" placeholder="Search stops by name (for example Pilot)" autocomplete="off">
             <div id="chips">
-              <button class="chip" data-kind="fuel">⛽ Fuel</button>
-              <button class="chip" data-kind="truck">🚛 Truck stops</button>
-              <button class="chip" data-kind="rest">🅿️ Rest areas</button>
-              <button class="chip" data-kind="parking">🅿️ Truck parking</button>
-              <button class="chip" data-kind="scale">⚖️ Weigh stations</button>
-              <button class="chip" data-kind="bridge">🌉 Clearances</button>
+              <button class="chip" data-kind="fuel"><svg class="ic"><use href="#i-fuel"/></svg>Fuel</button>
+              <button class="chip" data-kind="truck"><svg class="ic"><use href="#i-truck"/></svg>Truck stops</button>
+              <button class="chip" data-kind="rest"><svg class="ic"><use href="#i-rest"/></svg>Rest areas</button>
+              <button class="chip" data-kind="parking"><svg class="ic"><use href="#i-parking"/></svg>Truck parking</button>
+              <button class="chip" data-kind="scale"><svg class="ic"><use href="#i-scale"/></svg>Weigh stations</button>
+              <button class="chip" data-kind="bridge"><svg class="ic"><use href="#i-bridge"/></svg>Clearances</button>
               <button class="chip" id="chipClear">✕ Clear map</button>
             </div>
           </div>
@@ -294,6 +355,20 @@
               </label>
               <label class="check wide"><input id="hazmatBox" type="checkbox"> Hazmat load</label>
             </div>
+          </section>
+          <section>
+            <h3>Route preferences</h3>
+            <div id="prefs">
+              <label>Toll roads
+                <select id="tollsBox"><option value="avoid">Avoid</option><option value="allow" selected>Allow</option><option value="prefer">Prefer (faster)</option></select>
+              </label>
+              <label>Ferries
+                <select id="ferryBox"><option value="avoid">Avoid</option><option value="allow" selected>Allow</option></select>
+              </label>
+              <label class="check wide"><input id="truckRouteBox" type="checkbox"> Prefer designated truck routes</label>
+            </div>
+            <small>"Avoid" is a strong preference, not a ban: if there is no other way, a route may still use one.
+              Press Find route again after changing these. Routes show whether they use tolls or a ferry, but toll prices are not available yet.</small>
           </section>
           <section>
             <h3>Your hours (US rules)</h3>
@@ -325,7 +400,7 @@
           </section>
           <section>
             <h3>Look</h3>
-            <button class="themeToggle">🌓 Switch light / dark</button>
+            <button class="themeToggle"><svg class="ic"><use href="#i-contrast"/></svg>Switch light / dark</button>
           </section>
           <section>
             <small>Map data © OpenStreetMap contributors. Routing: Valhalla. Addresses: Nominatim and Photon.
@@ -499,21 +574,40 @@
     const FEET_TO_METERS = 0.3048;
     const POUNDS_TO_TONS = 0.000453592;
 
-    async function getRoute(start, end, truck) {
+    // Your route preferences (Truck tab): how to treat toll roads and ferries, and whether to favor truck routes.
+    function readRoutePrefs() {
+      return {
+        tolls: document.getElementById('tollsBox').value,          // 'avoid', 'allow' or 'prefer'
+        ferries: document.getElementById('ferryBox').value,        // 'avoid' or 'allow'
+        truckRoute: document.getElementById('truckRouteBox').checked
+      };
+    }
+
+    // Asks the routing service for one route (and sometimes its alternatives).
+    // "extraCosting" and "topLevel" let one trip be asked several ways: shortest distance, no tolls, and so on.
+    async function requestRoute(start, end, truck, prefs, extraCosting, topLevel) {
+      const costing = {
+        height: truck.heightFt * FEET_TO_METERS,
+        width: truck.widthFt * FEET_TO_METERS,
+        length: truck.lengthFt * FEET_TO_METERS,
+        weight: truck.weightLbs * POUNDS_TO_TONS,
+        hazmat: truck.hazmat
+      };
+      // "use_tolls" and "use_ferry" run from 0 (avoid as much as possible) to 1 (prefer). Avoiding is a strong
+      // preference, not a ban: if there is truly no other way, the route may still use one.
+      if (prefs.tolls === 'avoid') costing.use_tolls = 0; else if (prefs.tolls === 'prefer') costing.use_tolls = 1;
+      if (prefs.ferries === 'avoid') costing.use_ferry = 0;
+      if (prefs.truckRoute) costing.use_truck_route = 1;
+      Object.assign(costing, extraCosting);
       const request = {
         // "radius" says how far (in meters) the service may look for the nearest road. A town center might not
         // be on any road, so it gets 500 m. An exact address or dropped pin only gets 100-150 m, so you
         // don't get snapped onto a different road than the one you meant.
         locations: [ { lat: start.lat, lon: start.lon, radius: start.radius || 500 }, { lat: end.lat, lon: end.lon, radius: end.radius || 500 } ],
         costing: 'truck',
-        costing_options: { truck: {
-          height: truck.heightFt * FEET_TO_METERS,
-          width: truck.widthFt * FEET_TO_METERS,
-          length: truck.lengthFt * FEET_TO_METERS,
-          weight: truck.weightLbs * POUNDS_TO_TONS,
-          hazmat: truck.hazmat
-        } },
-        directions_options: { units: 'miles' }
+        costing_options: { truck: costing },
+        directions_options: { units: 'miles' },
+        ...topLevel
       };
       const url = 'https://valhalla1.openstreetmap.de/route?json=' + encodeURIComponent(JSON.stringify(request));
       const response = await fetch(url);
@@ -525,7 +619,78 @@
         }
         throw new Error('No truck route found. The routing service said: ' + (data.error || 'unknown reason') + '. Try adding the state to each place, e.g. "Dallas, TX".');
       }
-      return data.trip;
+      return data;
+    }
+
+    // A ROUGH fuel estimate. Trucks burn the most fuel per mile when cruising fast or crawling in traffic, and the
+    // least around 50-58 mph. It knows nothing about hills, wind, your load or traffic, so treat it as a guide for
+    // comparing routes, not a promise.
+    function estimateGallons(miles, seconds, mpg) {
+      const averageMph = miles / (seconds / 3600);
+      let factor = 1;
+      if (averageMph > 58) factor -= 0.012 * (averageMph - 58);
+      if (averageMph < 42) factor -= 0.010 * (42 - averageMph);
+      return miles / (mpg * Math.max(0.6, factor));
+    }
+
+    // Asks for the route several ways, removes duplicates, labels each one (Fastest, Shortest, Fuel saver, No tolls...)
+    // and returns them with the fastest first.
+    async function buildRouteChoices(start, end, truck) {
+      const prefs = readRoutePrefs();
+      const found = [];                                   // {trip, origin: [labels that came from how we asked]}
+      const [fastest, shortest] = await Promise.allSettled([
+        requestRoute(start, end, truck, prefs, {}, { alternates: 2 }),
+        requestRoute(start, end, truck, prefs, { shortest: true }, {})
+      ]);
+      if (fastest.status === 'rejected') throw fastest.reason;       // no main route: report the real problem
+      found.push({ trip: fastest.value.trip, origin: [], source: 'main' });
+      for (const alternate of fastest.value.alternates || []) if (alternate.trip) found.push({ trip: alternate.trip, origin: [], source: 'alt' });
+      if (shortest.status === 'fulfilled') found.push({ trip: shortest.value.trip, origin: [], source: 'short' });
+
+      // If a route uses a toll road or a ferry and you allow them, also look for one that avoids it, so you can compare.
+      const extras = [];
+      if (found.some(f => f.trip.summary.has_toll) && prefs.tolls !== 'avoid') extras.push(['No tolls', { use_tolls: 0 }]);
+      if (found.some(f => f.trip.summary.has_ferry) && prefs.ferries !== 'avoid') extras.push(['No ferries', { use_ferry: 0 }]);
+      const more = await Promise.allSettled(extras.map(([label, costing]) => requestRoute(start, end, truck, prefs, costing, {})));
+      more.forEach((result, k) => { if (result.status === 'fulfilled') found.push({ trip: result.value.trip, origin: [extras[k][0]], source: 'extra' }); });
+
+      // The "shortest distance" request ignores toll and ferry settings. So if you chose to avoid tolls or ferries,
+      // drop any route that breaks that, as long as at least one route doesn't.
+      let pool = found;
+      if (prefs.tolls === 'avoid') { const clean = pool.filter(f => !f.trip.summary.has_toll); if (clean.length) pool = clean; }
+      if (prefs.ferries === 'avoid') { const clean = pool.filter(f => !f.trip.summary.has_ferry); if (clean.length) pool = clean; }
+
+      const mpg = truck.mpg || 6.5, choices = [];
+      for (const item of pool) {
+        const summary = item.trip.summary;
+        const twin = choices.find(c => Math.abs(c.miles - summary.length) < Math.max(0.3, summary.length * 0.003) &&
+                                       Math.abs(c.seconds - summary.time) < Math.max(60, summary.time * 0.01));
+        if (twin) { twin.origin.push(...item.origin); twin.sources.add(item.source); continue; }      // the same route found twice: keep one, merge the labels
+        const path = decodeShape(item.trip.legs[0].shape);
+        choices.push({
+          path, along: cumulativeMiles(path), maneuvers: item.trip.legs[0].maneuvers,
+          miles: summary.length, seconds: summary.time, hasToll: !!summary.has_toll, hasFerry: !!summary.has_ferry,
+          gallons: estimateGallons(summary.length, summary.time, mpg), origin: [...item.origin], sources: new Set([item.source])
+        });
+      }
+      const best = (key) => choices.reduce((a, b) => (b[key] < a[key] ? b : a));
+      const quickest = best('seconds'), closest = best('miles'), saver = best('gallons');
+      // A label is only given when it means something: "Shortest" must be at least 1% shorter than the fastest route,
+      // and "Fuel saver" must use at least 3% less estimated fuel.
+      const shorterEnough = closest === quickest || closest.miles <= quickest.miles * 0.99;
+      const saverEnough = saver === quickest || saver.gallons <= quickest.gallons * 0.97;
+      for (const c of choices) {
+        c.tags = [];
+        if (c === quickest) c.tags.push('Fastest');
+        if (c === closest && shorterEnough) c.tags.push('Shortest');
+        if (c === saver && saverEnough) c.tags.push('Fuel saver');
+        c.tags.push(...c.origin);
+        c.title = c.tags.length ? c.tags.slice(0, 2).join(' · ') : 'Alternative';
+      }
+      // A route that only came from the "shortest" request and earned no label isn't worth showing.
+      const kept = choices.filter(c => c.tags.length || !(c.sources.size === 1 && c.sources.has('short')));
+      kept.sort((a, b) => a.seconds - b.seconds);
+      return kept;
     }
 
     // ---------- Piece 3: decode the route's shape ----------
@@ -653,7 +818,32 @@
       if (tags.amenity === 'parking' && (tags.hgv === 'yes' || tags.hgv === 'designated' || tags['capacity:hgv'] || tags['parking:hgv'])) return 'parking';
       return null;
     }
-    const ICONS = { fuel: '⛽', truck: '🚛', rest: '🅿️', scale: '⚖️', parking: '🅿️', bridge: '🌉' };
+    const ICONS = { fuel: '⛽', truck: '🚛', rest: '🅿️', scale: '⚖️', parking: '🅿️', bridge: '🌉' };   // (old emoji, now only used in a few text hints)
+
+    // ---------- Icon helpers: round colored badges for the map pins and list rows ----------
+    const KIND_LOOK = {                     // [color, which icon from the icon set]
+      fuel: ['#f97316', 'i-fuel'], truck: ['#2563eb', 'i-truck'], rest: ['#16a34a', 'i-rest'], parking: ['#4f46e5', 'i-parking'],
+      scale: ['#9333ea', 'i-scale'], bridge: ['#d97706', 'i-bridge'], danger: ['#dc2626', 'i-nogo'], fav: ['#f5a623', 'i-star']
+    };
+    function svgIcon(name, extraClass) { return '<svg class="ic ' + (extraClass || '') + '"><use href="#' + name + '"/></svg>'; }
+    function badgeHtml(kind, size) {
+      const look = KIND_LOOK[kind] || KIND_LOOK.fuel;
+      return '<span class="badge ' + size + ' ' + kind + '" style="background:' + look[0] + '">' + svgIcon(look[1]) + '</span>';
+    }
+    function badgeElement(kind, size) {
+      const holder = document.createElement('span');
+      holder.innerHTML = badgeHtml(kind, size);
+      return holder.firstChild;
+    }
+    // The small icon in front of an address choice: a pin for an exact spot, buildings for a whole town.
+    function fillPlaceRow(row, place) {
+      row.textContent = place.label;
+      const icon = document.createElement('span');
+      icon.className = 'rowIcon';
+      icon.innerHTML = svgIcon(place.precise ? 'i-pin' : 'i-city');
+      row.prepend(icon);
+    }
+    function setStarIcon(button, on) { button.innerHTML = svgIcon('i-star', 'star' + (on ? ' on' : '')); }
     const NAMES = { fuel: 'Fuel', truck: 'Truck stop', rest: 'Rest area', scale: 'Weigh station', parking: 'Truck parking', bridge: 'Low clearance' };
 
     // ---------- Low clearances ----------
@@ -863,13 +1053,13 @@
       const tooLow = stops.filter(s => s.kind === 'bridge' && s.clearance < truckHeightM).length;
       const tight = stops.filter(s => s.kind === 'bridge' && s.clearance >= truckHeightM).length;
       document.getElementById('warnLine').textContent =
-        tooLow ? '⛔ ' + tooLow + ' posted clearance(s) LOWER than your truck near this route - check the list (some may be side streets or overpasses you don\'t pass under).'
-        : tight ? '🌉 ' + tight + ' tight clearance(s) within 1.5 ft of your truck height near this route.'
+        tooLow ? 'Warning: ' + tooLow + ' posted clearance(s) LOWER than your truck near this route - check the list (some may be side streets or overpasses you don\'t pass under).'
+        : tight ? 'Heads-up: ' + tight + ' tight clearance(s) within 1.5 ft of your truck height near this route.'
         : isFinal ? '✅ No low clearances found near your route. (Only heights that map volunteers have entered can be checked.)' : '';
 
       if (stops.length === 0) { box.innerHTML = (isFinal ? '<div class="stop"><small>No stops found near this route.</small></div>' : progress) + note; return; }
       box.innerHTML = progress + note +
-        '<div class="stop tip"><small>Tap a stop to show it on the map, or use the buttons above to show a whole kind. ☆ saves it to Favs, 💲 enters its diesel price.</small></div>';
+        '<div class="stop tip"><small>Tap a stop to show it on the map, or use the buttons above to show a whole kind. The star saves it to Favs, and $ enters its diesel price.</small></div>';
 
       // Which stop has the lowest diesel price that someone has reported?
       const cheapestKey = cheapestStopKey(stops);
@@ -881,7 +1071,7 @@
       for (const s of stops) {
         const lowForYou = s.kind === 'bridge' && s.clearance < truckHeightM;
         const pin = L.marker([s.lat, s.lon], {
-          icon: L.divIcon({ className: '', html: '<div class="pin">' + (lowForYou ? '⛔' : ICONS[s.kind]) + '</div>', iconSize: [26, 26] })
+          icon: L.divIcon({ className: '', html: badgeHtml(lowForYou ? 'danger' : s.kind, 'pin'), iconSize: [32, 32], iconAnchor: [16, 16], popupAnchor: [0, -14] })
         }).bindPopup('<b>' + s.name.replace(/</g, '&lt;') + '</b><br>' + NAMES[s.kind] +
                      (s.kind === 'bridge' ? '<br>Posted clearance ' + fmtFt(s.clearance) : ''));
         markerByKey[s.key] = pin;
@@ -899,10 +1089,10 @@
       }
       for (const s of listed) {
         const tooLowForYou = s.kind === 'bridge' && s.clearance < truckHeightM;
-        const icon = tooLowForYou ? '⛔' : ICONS[s.kind];
         const row = document.createElement('div');
         row.className = 'stop';
-        row.textContent = icon + ' ' + s.name + '  - ' + NAMES[s.kind];
+        row.textContent = s.name + '  - ' + NAMES[s.kind];
+        row.prepend(badgeElement(tooLowForYou ? 'danger' : s.kind, 'row'));   // the colored round icon at the left
         const detail = document.createElement('small');
         detail.textContent = 'mile ' + s.mile.toFixed(0) + ' - ' + s.away.toFixed(1) + ' mi off route' + priceText(s, cheapestKey) +
                             (s.kind === 'scale' ? ' - open/closed status not available' : '') +
@@ -1004,12 +1194,12 @@
         const stop = bestStopFor(ev);
         const row = document.createElement('div');
         row.className = 'item ' + ev.kind;
-        row.textContent = (ev.kind === 'rest10' ? '🛏️ 10-hour rest' : '☕ 30-minute break') + ' around mile ' + ev.mile.toFixed(0) + ' - ' + when(ev.time);
+        row.textContent = (ev.kind === 'rest10' ? '10-hour rest' : '30-minute break') + ' around mile ' + ev.mile.toFixed(0) + ' - ' + when(ev.time);
         const why = document.createElement('small');
         why.textContent = ev.why;
         row.appendChild(why);
         const suggestion = document.createElement('small');
-        if (stop) suggestion.textContent = 'Best stop: ' + ICONS[stop.kind] + ' ' + stop.name + ' (mile ' + stop.mile.toFixed(0) + ', ' + (ev.mile - stop.mile).toFixed(0) + ' miles before your limit)';
+        if (stop) suggestion.textContent = 'Best stop: ' + stop.name + ' (' + NAMES[stop.kind].toLowerCase() + ', mile ' + stop.mile.toFixed(0) + ', ' + (ev.mile - stop.mile).toFixed(0) + ' miles before your limit)';
         else suggestion.textContent = currentStops.length ? 'No truck stop or rest area found before this point - plan ahead!' : 'Stops are still loading...';
         row.appendChild(suggestion);
         row.style.cursor = stop ? 'pointer' : 'default';
@@ -1053,7 +1243,7 @@
       const button = document.createElement('button');
       button.className = 'price';
       button.title = 'Enter the diesel price you saw here';
-      button.textContent = '💲';
+      button.textContent = '$';
       button.onclick = (event) => {
         event.stopPropagation();
         const answer = prompt('Diesel price per gallon at ' + stop.name + ' (example: 3.89):', prices[stop.key] ? prices[stop.key].p : '');
@@ -1071,14 +1261,14 @@
       const line = document.getElementById('fuelLine');
       if (!currentTrip) { line.textContent = ''; return; }
       const mpg = Number(document.getElementById('mpgBox').value) || 6.5;
-      const gallons = currentTrip.miles / mpg;
+      const gallons = estimateGallons(currentTrip.miles, currentTrip.hours * 3600, mpg);   // same rough estimate the route cards use
       const key = cheapestStopKey(currentStops);
-      let text = '⛽ About ' + gallons.toFixed(0) + ' gallons of diesel at ' + mpg + ' MPG. ';
+      let text = 'About ' + gallons.toFixed(0) + ' gallons of diesel at ' + mpg + ' MPG. ';
       if (key) {
         const stop = currentStops.find(s => s.key === key);
         text += 'About $' + (gallons * prices[key].p).toFixed(0) + ' at the cheapest price you entered ($' + prices[key].p.toFixed(2) + ' at ' + stop.name + ').';
       } else {
-        text += 'Tap 💲 on a fuel stop to enter a price and compare.';
+        text += 'Tap $ on a fuel stop to enter a price and compare.';
       }
       line.textContent = text;
     }
@@ -1108,11 +1298,11 @@
       const button = document.createElement('button');
       button.className = 'star';
       button.title = 'Save as favorite';
-      button.textContent = isFavorite(stop.key) ? '⭐' : '☆';
+      setStarIcon(button, isFavorite(stop.key));
       button.onclick = (event) => {
         event.stopPropagation();   // don't also "click" the row underneath
         toggleFavorite(stop);
-        button.textContent = isFavorite(stop.key) ? '⭐' : '☆';
+        setStarIcon(button, isFavorite(stop.key));
       };
       return button;
     }
@@ -1123,16 +1313,17 @@
       favMarkers.clearLayers();
       document.getElementById('favCount').textContent = favorites.length ? ' (' + favorites.length + ')' : '';
       if (!favorites.length) {
-        box.innerHTML = '<div class="item"><small>Tap the ☆ on any stop to save it here.</small></div>';
+        box.innerHTML = '<div class="item"><small>Tap the star on any stop to save it here.</small></div>';
         return;
       }
       for (const f of favorites) {
-        L.marker([f.lat, f.lon], { icon: L.divIcon({ className: '', html: '<div class="pin">⭐</div>', iconSize: [26, 26] }) })
+        L.marker([f.lat, f.lon], { icon: L.divIcon({ className: '', html: badgeHtml('fav', 'pin'), iconSize: [32, 32], iconAnchor: [16, 16], popupAnchor: [0, -14] }) })
           .addTo(favMarkers).bindPopup('<b>' + f.name.replace(/</g, '&lt;') + '</b><br>' + NAMES[f.kind]);
 
         const row = document.createElement('div');
         row.className = 'item';
-        row.textContent = ICONS[f.kind] + ' ' + f.name + '  ';
+        row.textContent = f.name + '  ';
+        row.prepend(badgeElement(f.kind, 'row'));
 
         const go = document.createElement('button');
         go.textContent = 'Route here';
@@ -1214,7 +1405,7 @@
       try {
         const results = await searchPlaces(text);
         list.innerHTML = '';
-        let heading = 'Tap the right one (🎯 = exact spot, 🏙️ = middle of a town):';
+        let heading = 'Tap the right one (pin icon = exact spot, buildings icon = middle of a town):';
         let places = results;
         if (!places.length) {
           // The exact address isn't in the free map data. Offer the town instead: pick it, then tap the map
@@ -1245,7 +1436,7 @@
         for (const place of places) {
           const row = document.createElement('div');
           row.className = 'choice';
-          row.textContent = (place.precise ? '🎯 ' : '🏙️ ') + place.label;
+          fillPlaceRow(row, place);
           const full = document.createElement('small');
           full.textContent = place.full;
           row.appendChild(full);
@@ -1309,7 +1500,7 @@
         for (const place of places) {
           const row = document.createElement('div');
           row.className = 'choice';
-          row.textContent = (place.precise ? '🎯 ' : '🏙️ ') + place.label;
+          fillPlaceRow(row, place);
           const full = document.createElement('small');
           full.textContent = place.full;
           row.appendChild(full);
@@ -1320,7 +1511,7 @@
         more.className = 'choice';
         const number = (text.match(/^\s*(\d+)/) || [])[1];
         // If you typed a house number, the quick suggestions often only know the street, so point to the exact-address search.
-        more.innerHTML = number ? '<b>🔍 Need the exact house ' + number + '? Tap to search addresses</b>' : '<small>🔍 Not here? Tap for more matches (searches two services)</small>';
+        more.innerHTML = number ? '<b>' + svgIcon('i-search') + ' Need the exact house ' + number + '? Tap to search addresses</b>' : '<small>Not here? Tap for more matches (searches two services)</small>';
         more.onclick = () => { list.dataset.source = ''; showChoices(which); };
         list.appendChild(more);
       } catch (error) { /* a cancelled or failed suggestion is fine: the 🔍 search still works */ }
@@ -1331,7 +1522,7 @@
       const label = 'Pin ' + lat.toFixed(5) + ', ' + lng.toFixed(5);
       const box = document.createElement('div');
       box.innerHTML = '<b>Dropped pin</b><br><small>' + lat.toFixed(5) + ', ' + lng.toFixed(5) + '</small><br>';
-      for (const [which, text] of [['start', '📍 Start here'], ['end', '🏁 Go here']]) {
+      for (const [which, text] of [['start', 'Start here'], ['end', 'Go here']]) {
         const button = document.createElement('button');
         button.textContent = text;
         button.style.cssText = 'margin:6px 6px 0 0;padding:6px 10px;border:0;border-radius:6px;background:#f5a623;font-weight:bold;cursor:pointer';
@@ -1499,7 +1690,7 @@
       const top = document.createElement('div');
       top.className = 'item';
       const saveButton = document.createElement('button');
-      saveButton.textContent = '💾 Save the current trip';
+      saveButton.textContent = '+ Save the current trip';
       saveButton.onclick = (event) => {
         event.stopPropagation();
         if (!lastSearch) { say('Find a route first, then save it.'); return; }
@@ -1566,6 +1757,109 @@
     }
     loadTruck();
 
+    // Remember your route preferences (tolls, ferries, truck routes) on this device too.
+    function saveRoutePrefs() { try { localStorage.setItem('routePrefs', JSON.stringify(readRoutePrefs())); } catch (e) { } }
+    function loadRoutePrefs() {
+      try {
+        const saved = JSON.parse(localStorage.getItem('routePrefs'));
+        if (!saved) return;
+        document.getElementById('tollsBox').value = saved.tolls;
+        document.getElementById('ferryBox').value = saved.ferries;
+        document.getElementById('truckRouteBox').checked = !!saved.truckRoute;
+      } catch (e) { }
+    }
+    loadRoutePrefs();
+    for (const id of ['tollsBox', 'ferryBox', 'truckRouteBox']) {
+      document.getElementById(id).addEventListener('change', () => {
+        saveRoutePrefs();
+        if (lastSearch) say('Route preferences changed. Press Find route to update the route.');
+      });
+    }
+
+    // ---------- Showing the route choices ----------
+    let routeChoices = [];       // every route found for the current trip, fastest first
+    let chosenRoute = 0;         // which one is selected
+    let lastCoarseNote = '';
+
+    function formatDuration(seconds) {
+      const hours = Math.floor(seconds / 3600), minutes = Math.round((seconds % 3600) / 60);
+      return hours ? hours + ' h ' + minutes + ' min' : minutes + ' min';
+    }
+    // The cards above the tabs: one per route. Tap a card to switch routes.
+    function renderRouteOptions() {
+      const box = document.getElementById('routeOptions');
+      box.innerHTML = '';
+      if (routeChoices.length < 2) { box.classList.remove('show'); return; }
+      box.classList.add('show');
+      routeChoices.forEach((choice, i) => {
+        const card = document.createElement('button');
+        card.className = 'routeCard' + (i === chosenRoute ? ' on' : '');
+        const title = document.createElement('b'), main = document.createElement('span'), more = document.createElement('small');
+        title.textContent = choice.title;
+        main.textContent = formatDuration(choice.seconds) + ' · ' + choice.miles.toFixed(0) + ' mi';
+        more.textContent = '≈ ' + choice.gallons.toFixed(0) + ' gal' + (choice.hasToll ? ' · tolls' : '') + (choice.hasFerry ? ' · ferry' : '');
+        card.title = 'The fuel figure is a rough estimate from distance and average speed. It does not know about hills, wind, load or traffic.';
+        card.append(title, main, more);
+        card.onclick = () => chooseRoute(i);
+        box.appendChild(card);
+      });
+    }
+
+    // Makes one of the found routes the active one: draws it, loads its turn-by-turn steps, and looks for stops along it.
+    async function chooseRoute(index, options = {}) {
+      const choice = routeChoices[index];
+      if (!choice) return;
+      chosenRoute = index;
+      const path = choice.path, { start, end } = lastSearch;
+      // The turn-by-turn steps, used by the Route tab and live navigation.
+      currentRoute = { path, along: choice.along, maneuvers: choice.maneuvers };
+      renderDirections();
+      nav.index = 0; nav.spoken = {}; nav.rerouting = false;
+      if (nav.active) { document.getElementById('navBar').textContent = '✔ New route ready'; speak('New route ready.'); }
+
+      // Draw it: the other routes in gray (tap one to switch), the chosen one in orange on top.
+      routeStuff.clearLayers();
+      previewLayer.clearLayers(); previewMarkers.start = previewMarkers.end = null;   // the route's own Start/End pins replace the preview pins
+      routeChoices.forEach((other, j) => {
+        if (j === index) return;
+        L.polyline(other.path, { color: '#8a94a6', weight: 6, opacity: 0.8 }).addTo(routeStuff).on('click', () => chooseRoute(j));
+      });
+      L.polyline(path, { color: '#e07b00', weight: 7 }).addTo(routeStuff);
+      L.marker([start.lat, start.lon]).addTo(routeStuff).bindPopup('Start');
+      L.marker([end.lat, end.lon]).addTo(routeStuff).bindPopup('Destination');
+
+      // Fold the search card down and show the results panel.
+      document.getElementById('search').classList.add('compact');
+      document.body.classList.add('has-route');     // shows the navigation arrow on the map
+      if (getSheet() === 'peek' && !nav.active) setSheet('half');
+      if (options.fit) {                            // fit all the routes into the part of the map that is still visible
+        const onPhone = window.innerWidth < 900;
+        map.fitBounds(L.latLngBounds(routeChoices.flatMap(c => c.path)), {
+          paddingTopLeft: [30, (onPhone ? document.getElementById('search').offsetHeight : 0) + 30],
+          paddingBottomRight: [30, onPhone ? Math.round(window.innerHeight * (getSheet() === 'peek' ? 0.22 : 0.52)) + 20 : 30]
+        });
+      }
+      renderRouteOptions();
+      say(choice.miles.toFixed(0) + ' miles - about ' + formatDuration(choice.seconds) + ' of driving.' +
+          (choice.hasToll ? ' Uses toll roads.' : '') + (choice.hasFerry ? ' Uses a ferry.' : '') + lastCoarseNote);
+
+      // Work out the required breaks for this route.
+      currentTrip = { hours: choice.seconds / 3600, miles: choice.miles, gallons: choice.gallons };
+      currentStops = [];
+      selectedKeys.clear();                                  // a new route starts with a clean map
+      for (const key in markerByKey) delete markerByKey[key];
+      renderPlan();
+      updateFuelLine();
+      document.getElementById('warnLine').textContent = '';   // clear last route's clearance warning
+
+      // Now look for stops along it. If this fails, the route above stays on the map.
+      try { await showStops(path); }
+      catch (stopError) {
+        document.getElementById('stopList').innerHTML = '<div class="stop"><small></small></div>';
+        document.querySelector('#stopList small').textContent = stopError.message;
+      }
+    }
+
     // ---------- Putting it together: what happens when you press the button ----------
     document.getElementById('goButton').onclick = async function () {
       const startText = document.getElementById('startBox').value.trim();
@@ -1595,51 +1889,11 @@
         };
         saveTruck(truck);
 
-        say('Finding a route that fits your truck...');
-        const trip = await getRoute(start, end, truck);
-        const path = decodeShape(trip.legs[0].shape);
-        // Step 6: keep the turn-by-turn steps so the Directions tab and live navigation can use them.
-        currentRoute = { path, along: cumulativeMiles(path), maneuvers: trip.legs[0].maneuvers };
-        renderDirections();
-        nav.index = 0; nav.spoken = {}; nav.rerouting = false;
-        if (nav.active) { document.getElementById('navBar').textContent = '✔ New route ready'; speak('New route ready.'); }
-
-        // Draw it
-        routeStuff.clearLayers();
-        previewLayer.clearLayers(); previewMarkers.start = previewMarkers.end = null;   // the route's own Start/End pins replace the preview pins
-        const line = L.polyline(path, { color: '#e07b00', weight: 6 }).addTo(routeStuff);
-        L.marker([start.lat, start.lon]).addTo(routeStuff).bindPopup('Start');
-        L.marker([end.lat, end.lon]).addTo(routeStuff).bindPopup('Destination');
-        // Fold the search card down and show the results panel, then fit the route into the part of the map that is still visible.
-        document.getElementById('search').classList.add('compact');
-        document.body.classList.add('has-route');     // shows the navigation arrow on the map
-        if (getSheet() === 'peek' && !nav.active) setSheet('half');
-        const onPhone = window.innerWidth < 900;
-        map.fitBounds(line.getBounds(), {
-          paddingTopLeft: [30, (onPhone ? document.getElementById('search').offsetHeight : 0) + 30],
-          paddingBottomRight: [30, onPhone ? Math.round(window.innerHeight * (getSheet() === 'peek' ? 0.22 : 0.52)) + 20 : 30]
-        });
-
-        const miles = trip.summary.length.toFixed(0);
-        const hours = Math.floor(trip.summary.time / 3600);
-        const minutes = Math.round((trip.summary.time % 3600) / 60);
-        say(miles + ' miles - about ' + hours + ' h ' + minutes + ' min of driving.' + coarseNote);
-
-        // Step 5a: remember the trip and work out the required breaks.
-        currentTrip = { hours: trip.summary.time / 3600, miles: trip.summary.length };
-        currentStops = [];
-        selectedKeys.clear();                                  // a new route starts with a clean map
-        for (const key in markerByKey) delete markerByKey[key];
-        renderPlan();
-        updateFuelLine();
-        document.getElementById('warnLine').textContent = '';   // clear last route's clearance warning
-
-        // Step 4: now look for stops. If this fails, the route above stays on the map.
-        try { await showStops(path); }
-        catch (stopError) {
-          document.getElementById('stopList').innerHTML = '<div class="stop"><small></small></div>';
-          document.querySelector('#stopList small').textContent = stopError.message;
-        }
+        saveRoutePrefs();
+        say('Finding routes that fit your truck...');
+        routeChoices = await buildRouteChoices(start, end, truck);   // fastest first, plus shortest, fuel saver, no tolls...
+        lastCoarseNote = coarseNote;
+        await chooseRoute(0, { fit: true });                         // start with the fastest
       } catch (error) {
         nav.rerouting = false;
         say('Sorry: ' + error.message);
