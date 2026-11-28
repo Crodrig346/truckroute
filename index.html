@@ -795,7 +795,7 @@
     }
     function updateRotation() {
       const mapEl = document.getElementById('map'), ui = document.getElementById('mapUI');
-      const want = nav.active && nav.follow && rotateMode() === 'heading' && !map.hasLayer(satelliteMap) && !!streetMapGL();
+      const want = nav.active && rotateMode() === 'heading' && !map.hasLayer(satelliteMap) && !!streetMapGL();
       const mid = map.getCenter(), zoom = map.getZoom();                     // keep this spot in the middle of the screen
       if (want && !rot.on) {
         rot.on = true; document.body.classList.add('headingUp');
@@ -809,11 +809,12 @@
         map.invalidateSize({ pan: false });
         map.setView(mid, zoom, { animate: false });
       }
-      if (want && rot.heading != null) {                                    // turn the shortest way round
+      if (want && rot.heading != null && nav.follow) {                      // turn the shortest way round (frozen while you look around)
         const delta = (((rot.heading - rot.shown) % 360) + 540) % 360 - 180;
         rot.shown += delta;
         applyRotation(true);
       } else if (!want) applyRotation(false);
+      syncZoomAround();
     }
     // The direction of the road just ahead (from the route line), in degrees clockwise from north.
     function routeBearingAt(index) {
@@ -853,24 +854,31 @@
     map.on('dragstart', () => { dragFrom = map.getCenter(); });
     map.on('drag', () => {                                   // a real slide (not the wobble of two fingers landing for a pinch)
       if (!dragFrom || !nav.active || !nav.follow) return;
-      if (map.latLngToContainerPoint(dragFrom).distanceTo(map.latLngToContainerPoint(map.getCenter())) > 30) { dragFrom = null; stopFollowing(); rebaseSlide(); }
+      if (map.latLngToContainerPoint(dragFrom).distanceTo(map.latLngToContainerPoint(map.getCenter())) > 30) { dragFrom = null; stopFollowing(); }
     });
     map.on('dragend', () => { if (nav.active && nav.follow && nav.last) map.panTo(nav.last, { animate: true }); dragFrom = null; });   // a tiny slide: back onto the truck
-    // The map just went from turned to north-up in the middle of your slide: carry on the slide from where your finger is
-    // now, measured on the north-up map (otherwise the slide uses the old turned measurements and the map jumps away).
-    function rebaseSlide() {
-      try {
-        const d = map.dragging && map.dragging._draggable; if (!d || !d._moving && !d._moved) return;
-        const sc = d._parentScale || { x: 1, y: 1 };
-        const finger = d._startPoint.add(L.point((d._newPos.x - d._startPos.x) * sc.x, (d._newPos.y - d._startPos.y) * sc.y));
-        d._startPoint = finger;
-        d._startPos = L.DomUtil.getPosition(d._element); d._newPos = d._startPos.clone();
-        d._parentScale = L.DomUtil.getScale(map.getContainer());
-        if (map.dragging._positions) { map.dragging._positions = []; map.dragging._times = []; }   // no fling from the switch
-      } catch (e) { }
+    // On the turned map, a finger slide on the screen is turned back into the map's own directions before the map
+    // library sees it, so the map moves exactly under your finger.
+    {
+      const d = map.dragging && map.dragging._draggable;
+      if (d) {
+        const leafletMove = d._onMove;
+        d._onMove = function (e) {
+          if (!rot.on || (e.touches && e.touches.length > 1) || !this._startPoint) return leafletMove.call(this, e);
+          const p = e.touches && e.touches.length === 1 ? e.touches[0] : e;
+          const dx = p.clientX - this._startPoint.x, dy = p.clientY - this._startPoint.y, r = rot.shown * Math.PI / 180;
+          this._parentScale = { x: 1, y: 1 };                     // the turned box looks bigger on screen than it is
+          return leafletMove.call(this, {
+            clientX: this._startPoint.x + dx * Math.cos(r) - dy * Math.sin(r),
+            clientY: this._startPoint.y + dx * Math.sin(r) + dy * Math.cos(r),
+            target: e.target, srcElement: e.target, type: e.type,
+            preventDefault: () => { if (e.cancelable) e.preventDefault(); }, stopPropagation: () => e.stopPropagation()
+          });
+        };
+      }
     }
     function syncZoomAround() {                              // zoom around the middle of the map (your truck) while following
-      const mid = nav.active && nav.follow ? 'center' : true;
+      const mid = nav.active && (nav.follow || rot.on) ? 'center' : true;
       map.options.touchZoom = map.options.scrollWheelZoom = map.options.doubleClickZoom = mid;
     }
     // Voice on/off tile. It is added BEFORE the layers button so it sits just below it. Voice is OFF until you turn it on.
@@ -1115,7 +1123,7 @@
         // "radius" says how far (in meters) the service may look for the nearest road. A town center might not
         // be on any road, so it gets 500 m. An exact address or dropped pin only gets 100-150 m, so you
         // don't get snapped onto a different road than the one you meant.
-        locations: [ { lat: start.lat, lon: start.lon, radius: start.radius || 500 }, { lat: end.lat, lon: end.lon, radius: end.radius || 500 } ],
+        locations: [ { lat: start.lat, lon: start.lon, radius: start.radius || 500 }, end.access ? { lat: end.access.lat, lon: end.access.lon, radius: 50 } : { lat: end.lat, lon: end.lon, radius: end.radius || 500 } ],
         costing: 'truck',
         costing_options: { truck: costing },
         directions_options: { units: 'miles' },
@@ -1499,7 +1507,7 @@
     }
     // Drive to a stop. While driving, the route is simply changed to end there (quick, from where you are).
     async function goToStop(stop) {
-      const end = { lat: stop.lat, lon: stop.lon, radius: 100 };
+      const end = { lat: stop.lat, lon: stop.lon, radius: 100, access: stop.access || null };
       knownPlaces[stop.name] = end;
       document.getElementById('endBox').value = stop.name;
       if (nav.active && nav.last && lastSearch) {
@@ -1670,7 +1678,7 @@
         let exit = null, exitDist = 2;
         for (const e of exits) { const d = miles([lat, lon], [e.lat, e.lon]); if (d < exitDist) { exitDist = d; exit = e.ref; } }
         const city = tags['addr:city'] || '', state = tags['addr:state'] || '';
-        stops.push({ key: item.type + '/' + item.id, kind, clearance, lat, lon, name: tags.name || tags.brand || NAMES[kind],
+        stops.push({ key: item.type + '/' + item.id, kind, clearance, lat, lon, access: item.access || null, name: tags.name || tags.brand || NAMES[kind],
                      mile: along[bestIndex], away, tags, exit, place: [city, state].filter(Boolean).join(', ') });
       }
       stops.sort((a, b) => a.mile - b.mile);
@@ -2112,7 +2120,7 @@
       try { localStorage.setItem('mapRotate', event.target.checked ? 'heading' : 'north'); } catch (e) { }
       syncRecenterTile();
     });
-    const APP_VERSION = 'v33';
+    const APP_VERSION = 'v34';
     document.getElementById('appVersion').textContent = 'TruckRoute ' + APP_VERSION;
 
     // ----- Saved: places you use often (the other two parts, favorites and trips, draw themselves) -----
@@ -2184,7 +2192,7 @@
     const previewLayer = L.layerGroup().addTo(map);   // the pins that show which exact spot you chose
     const previewMarkers = {};
     function choosePlace(which, place) {
-      knownPlaces[place.label] = { lat: place.lat, lon: place.lon, radius: place.precise ? 100 : 500 };
+      knownPlaces[place.label] = { lat: place.lat, lon: place.lon, radius: place.precise ? 100 : 500, access: place.access || null };
       document.getElementById(which + 'Box').value = place.label;
       document.getElementById('choices').style.display = 'none';
       if (previewMarkers[which]) previewLayer.removeLayer(previewMarkers[which]);
@@ -2285,8 +2293,8 @@
       if (!label || !spot || label === 'My location' || /^Pin -?\d/.test(label) || /^\s*-?\d{1,3}\.\d+\s*,\s*-?\d{1,3}\.\d+\s*$/.test(label)) return;
       const list = loadPlaceHistory();
       const found = list.find(p => sameSpot(p, spot) || p.label.toLowerCase() === label.toLowerCase());
-      if (found) { found.count++; found.last = Date.now(); }
-      else list.push({ label, lat: spot.lat, lon: spot.lon, precise: !spot.coarse, count: 1, last: Date.now() });
+      if (found) { found.count++; found.last = Date.now(); if (spot.access && !found.access) found.access = spot.access; }
+      else list.push({ label, lat: spot.lat, lon: spot.lon, precise: !spot.coarse, count: 1, last: Date.now(), access: spot.access || undefined });
       list.sort((a, b) => placeScore(b) - placeScore(a));
       savePlaceHistory(list.slice(0, 40));
     }
@@ -2440,6 +2448,37 @@
     // The routing service returns the route as a list of "maneuvers" (turn left, merge, exit...), each tied to
     // a point on the route line. For live navigation we watch your GPS position, work out where you are on
     // the line, and tell you what's coming next - on screen and out loud.
+    // Which side of the road the destination is on, from the app's own measurement: the direction you are driving at the
+    // end of the route, and where the place really is. Answers 'left', 'right', 'ahead' or null (can't tell).
+    function destinationSide(path, place) {
+      if (!path || path.length < 2 || !place || typeof place.lat !== 'number') return null;
+      const E = path[path.length - 1];
+      let i = path.length - 2;
+      while (i > 0 && miles(path[i], E) < 0.025) i--;                          // look back about 40 m along the road
+      const P = path[i], k = Math.cos(E[0] * Math.PI / 180);
+      const dx = (E[1] - P[1]) * k, dy = E[0] - P[0];                          // the way you are driving (east, north)
+      const vx = (place.lon - E[1]) * k, vy = place.lat - E[0];                // from the end of the route to the place
+      const dLen = Math.hypot(dx, dy), vLen = Math.hypot(vx, vy);
+      if (!dLen || !vLen) return null;
+      const placeMiles = miles(E, [place.lat, place.lon]);
+      if (placeMiles < 0.006 || placeMiles > 0.5) return null;                 // right on the road (no side) or too far to judge
+      const side = (dx * vy - dy * vx) / dLen, ahead = (dx * vx + dy * vy) / dLen;
+      if (Math.abs(side) < Math.abs(ahead) * 0.45 && ahead > 0) return 'ahead';
+      return side > 0 ? 'left' : 'right';
+    }
+    function fixArrivalSide(route, place) {
+      const last = route && route.maneuvers && route.maneuvers[route.maneuvers.length - 1];
+      if (!last) return;
+      const strip = (t) => String(t || '').replace(/\s*(your\s+)?destination\s+(is|will be)\s+(on\s+(the|your)\s+(left|right)|(straight\s+)?ahead)\.?/gi, '')
+        .replace(/\s+on\s+the\s+(left|right)\s*\.?\s*$/i, '.').trim();
+      route.arriveSide = destinationSide(route.path, place);
+      const words = route.arriveSide === 'ahead' ? ' Your destination is straight ahead.' : route.arriveSide ? ' Your destination is on the ' + route.arriveSide + '.' : '';
+      for (const key of ['instruction', 'verbal_pre_transition_instruction']) {
+        let t = strip(last[key]);
+        if (t && !/[.!?]$/.test(t)) t += '.';
+        last[key] = (t + words).trim();
+      }
+    }
     let currentRoute = null;         // {path: route points, along: miles at each point, maneuvers: steps}
     const nav = { active: false, watchId: null, index: 0, spoken: {}, lastReroute: 0, rerouting: false, wakeLock: null, follow: true, last: null, lastFixAt: 0, noteAt: 0, arrived: false, savedAt: 0, hiddenAt: 0, startWhenReady: false };
     let youMarker = null;
@@ -2592,7 +2631,7 @@
       if (!isRealTurn) { spoken[j + 'far'] = spoken[j + 'near'] = true; }        // nothing to say for "Continue on ..."
       if (dist <= 1.0 && dist > 0.4 && longStretch && !spoken[j + 'far']) { spoken[j + 'far'] = true; speak('In one mile, ' + lowerFirst(pre)); }
       if (dist <= 0.25 && !spoken[j + 'near']) { spoken[j + 'far'] = spoken[j + 'near'] = true; speak(pre); }
-      if (isLast && dist < 0.03) { speak('You have arrived.'); stopNav(); navNote('🏁 You have arrived.'); nav.arrived = true; }
+      if (isLast && dist < 0.03) { speak('You have arrived.' + (currentRoute.arriveSide === 'ahead' ? ' Your destination is straight ahead.' : currentRoute.arriveSide ? ' Your destination is on the ' + currentRoute.arriveSide + '.' : '')); stopNav(); navNote('🏁 You have arrived.'); nav.arrived = true; }
     }
 
     // A short status note under the driving header.
@@ -3096,6 +3135,7 @@
       const path = choice.path, { start, end } = lastSearch;
       // The turn-by-turn steps, used by the Route tab and live navigation.
       currentRoute = { path, along: choice.along, maneuvers: choice.maneuvers, speeds: choice.speeds || [] };
+      fixArrivalSide(currentRoute, lastSearch && lastSearch.end);
       renderDirections();
       nav.index = 0; nav.spoken = {}; nav.rerouting = false;
       if (nav.active) { navNote('✔ New route ready'); speak('New route ready.'); }
@@ -3345,6 +3385,14 @@
       const center = bias ? bias.center : map.getCenter();
       return center.lat.toFixed(5) + ',' + center.lng.toFixed(5);
     }
+    // HERE gives a place's map pin ("position", e.g. the building) and, for most businesses and addresses, the spot on the
+    // road where you drive in ("access"). Routes go to the entrance, so you end on the road you really pull in from.
+    function hereAccess(item) {
+      const a = item.access && item.access[0];
+      if (!a || typeof a.lat !== 'number') return null;
+      if (miles([a.lat, a.lng], [item.position.lat, item.position.lng]) > 0.4) return null;      // something odd: ignore it
+      return { lat: a.lat, lon: a.lng };
+    }
     // Turns HERE's answer into our list of places.
     function herePlaces(items) {
       return items.filter(item => item.position).map(item => {
@@ -3357,7 +3405,7 @@
         else if (['houseNumber', 'street', 'intersection', 'addressBlock'].includes(item.resultType)) label = [street || item.title, town, state].filter(Boolean).join(', ');
         else label = [item.title, state].filter(Boolean).join(', ');
         return {
-          lat: item.position.lat, lon: item.position.lng, label: label || item.title,
+          lat: item.position.lat, lon: item.position.lng, label: label || item.title, access: hereAccess(item),
           full: (a.label || item.title || '').replace(/, United States$/, ''),
           kind: item.resultType,
           precise: !['locality', 'administrativeArea', 'postalCodePoint', 'country'].includes(item.resultType)
@@ -3436,7 +3484,7 @@
       else return null;
       const hours = item.openingHours && item.openingHours[0];
       if (hours && hours.text && /24/.test(hours.text.join(' ')) && /00:00\s*-\s*24:00/.test(hours.text.join(' '))) tags.opening_hours = '24/7';
-      return { type: 'here', id: item.id, lat: item.position.lat, lon: item.position.lng, tags };
+      return { type: 'here', id: item.id, lat: item.position.lat, lon: item.position.lng, access: hereAccess(item), tags };
     }
 
     // ----- Truck routing (HERE Routing v8) -----
@@ -3467,7 +3515,7 @@
       const params = {
         transportMode: 'truck',
         origin: start.lat.toFixed(6) + ',' + start.lon.toFixed(6),
-        destination: end.lat.toFixed(6) + ',' + end.lon.toFixed(6),
+        destination: (end.access || end).lat.toFixed(6) + ',' + (end.access || end).lon.toFixed(6),     // the entrance, if known
         return: 'polyline,summary,actions,instructions' + (wantTolls ? ',tolls' : ''),
         units: 'imperial', lang: 'en-US',
         'vehicle[height]': Math.round(truck.heightFt * 30.48),
