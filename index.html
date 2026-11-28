@@ -83,8 +83,36 @@
     [data-theme="dark"] .leaflet-control-attribution a { color: #aab2bf; }
     .voiceTile a { width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; background: var(--card); color: var(--muted); border-radius: 4px; }
     .voiceTile .ic { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-    .voiceTile a.on { color: var(--accent-ink); background: var(--accent); }
+    .voiceTile a:hover { background: var(--card); color: var(--muted); }                      /* no sticky gray after a tap */
+    .voiceTile a.on, .voiceTile a.on:hover { color: var(--accent-ink); background: var(--accent); }
     .voiceTile a.on .slash, .voiceTile a:not(.on) .wave { display: none; }
+    /* ----- "Map view" card (opens from the layers button) ----- */
+    #mapOptsShade { position: fixed; inset: 0; z-index: 1999; }
+    #mapOpts { position: fixed; z-index: 2000; width: 264px; max-width: calc(100vw - 80px); background: var(--card); color: var(--text);
+      border-radius: 16px; box-shadow: var(--shadow); padding: 14px; transform-origin: 0 100%; animation: mapOptsIn .16s ease-out; }
+    @keyframes mapOptsIn { from { opacity: 0; transform: scale(.92); } to { opacity: 1; transform: none; } }
+    #mapOpts .moHead { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+    #mapOpts .moHead b { font-size: 17px; }
+    #mapOpts .moClose { width: 36px; height: 36px; border: 0; border-radius: 50%; background: var(--field); color: var(--muted); font-size: 18px; line-height: 1; cursor: pointer; }
+    #mapOpts .moPick { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    #mapOpts .moPick button { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 6px 10px; border-radius: 12px;
+      border: 2px solid var(--line); background: var(--field); color: var(--text); font: inherit; font-size: 15px; font-weight: 600; cursor: pointer; }
+    #mapOpts .moPick button.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, var(--card)); }
+    #mapOpts .moPick svg { width: 56px; height: 56px; border-radius: 10px; }
+    #mapOpts .moRow { display: flex; align-items: center; gap: 12px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); cursor: pointer; }
+    #mapOpts .moRow .moIc { flex: none; width: 44px; height: 44px; border-radius: 12px; background: var(--field); display: flex; align-items: center; justify-content: center; }
+    #mapOpts .moRow .moIc svg { width: 26px; height: 26px; }
+    #mapOpts .moRow .moTxt { flex: 1; min-width: 0; }
+    #mapOpts .moRow .moTxt b { display: block; font-size: 15px; }
+    #mapOpts .moRow .moTxt small { display: block; color: var(--muted); font-size: 12.5px; line-height: 1.3; margin-top: 2px; }
+    #mapOpts .moSwitch { position: relative; flex: none; width: 50px; height: 30px; }
+    #mapOpts .moSwitch input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+    #mapOpts .moSwitch span { position: absolute; inset: 0; border-radius: 15px; background: var(--line); transition: background .15s; pointer-events: none; }
+    #mapOpts .moSwitch span::after { content: ''; position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%; background: #fff;
+      box-shadow: 0 1px 3px rgba(0,0,0,.3); transition: transform .15s; }
+    #mapOpts .moSwitch input:checked + span { background: var(--accent); }
+    #mapOpts .moSwitch input:checked + span::after { transform: translateX(20px); }
+    #mapOpts .moSwitch input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
     .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
     .dotStart { border: 3px solid #3b82f6; background: var(--card); }
     .dotEnd { background: #ef4444; }
@@ -572,11 +600,11 @@
               </label>
               <label class="check wide"><input id="truckRouteBox" type="checkbox"> Prefer designated truck routes</label>
               <label class="check wide"><input id="easyRoadsBox" type="checkbox" checked> Avoid tight turns and dirt roads (recommended)</label>
-              <label class="check wide"><input id="trafficBox" type="checkbox"> Live traffic (and switch to a faster route when one shows up)</label>
             </div>
             <small class="hint">"Avoid" is a strong preference, not a ban. Changes apply the next time you press Find route.</small>
           </section>
 
+          <div id="trafficHome" hidden><input id="trafficBox" type="checkbox" role="switch" aria-label="Live traffic"></div>
           <section class="setSub" id="setApp" hidden>
             <button class="subBack">‹ Settings</button>
             <h3>App settings</h3>
@@ -914,7 +942,64 @@
       box.addEventListener('change', () => { try { localStorage.setItem('voiceOn', box.checked ? '1' : '0'); } catch (e) { } if (box.checked) unlockVoice(); syncVoiceTile(); });
       syncVoiceTile();
     }
-    L.control.layers({ 'Street map': streetMap, 'Satellite': satelliteMap }, null, { position: 'bottomleft' }).addTo(map);
+    // Layers button: opens the "Map view" card (street or satellite, live traffic). Same size and look as the other map buttons.
+    const mapOptsControl = L.control({ position: 'bottomleft' });
+    mapOptsControl.onAdd = () => {
+      const bar = L.DomUtil.create('div', 'leaflet-bar voiceTile');
+      const button = L.DomUtil.create('a', '', bar);
+      button.id = 'mapOptsTile'; button.href = '#'; button.setAttribute('role', 'button');
+      button.title = 'Map view and traffic'; button.setAttribute('aria-label', button.title);
+      button.innerHTML = '<svg class="ic" viewBox="0 0 24 24"><path d="M12 3 2.5 8 12 13l9.5-5z"/><path d="m2.5 12 9.5 5 9.5-5"/><path d="m2.5 16 9.5 5 9.5-5"/></svg>';
+      L.DomEvent.disableClickPropagation(bar);
+      L.DomEvent.on(button, 'click', (event) => { L.DomEvent.preventDefault(event); if (document.getElementById('mapOpts')) closeMapOpts(); else openMapOpts(); });
+      return bar;
+    };
+    mapOptsControl.addTo(map);
+    const MAP_OPTS_HTML =
+      '<div class="moHead"><b>Map view</b><button class="moClose" type="button" aria-label="Close">✕</button></div>' +
+      '<div class="moPick">' +
+        '<button type="button" data-mo-map="street"><svg viewBox="0 0 56 56"><rect width="56" height="56" fill="#eceae4"/><path d="M0 38h56M20 0v56" stroke="#fff" stroke-width="7"/>' +
+          '<path d="M0 14 56 46" stroke="#f6d37a" stroke-width="6"/><path d="M36 0v56" stroke="#fff" stroke-width="3"/><rect x="40" y="6" width="12" height="9" rx="2" fill="#cfe5c3"/></svg>Street</button>' +
+        '<button type="button" data-mo-map="satellite"><svg viewBox="0 0 56 56"><rect width="56" height="56" fill="#3f5a3a"/><path d="M0 0h26v22H0z" fill="#56703f"/><path d="M30 30h26v26H30z" fill="#6b7f4a"/>' +
+          '<path d="M0 40 56 18" stroke="#b9b3a6" stroke-width="5"/><circle cx="14" cy="44" r="6" fill="#2f4630"/><path d="M38 4h14v14H38z" fill="#8a8f84"/></svg>Satellite</button>' +
+      '</div>' +
+      '<label class="moRow"><span class="moIc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="8" y="2" width="8" height="20" rx="3"/>' +
+        '<circle cx="12" cy="7" r="1.6" fill="#e5484d" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="#f5a623" stroke="none"/><circle cx="12" cy="17" r="1.6" fill="#30a46c" stroke="none"/></svg></span>' +
+        '<span class="moTxt"><b>Live traffic</b><small>Routes around slowdowns and finds faster routes while you drive</small></span>' +
+        '<span class="moSwitch"></span></label>';
+    function syncMapOpts() {
+      const box = document.getElementById('mapOpts'); if (!box) return;
+      const sat = map.hasLayer(satelliteMap);
+      box.querySelectorAll('[data-mo-map]').forEach(b => { const on = (b.dataset.moMap === 'satellite') === sat; b.classList.toggle('on', on); b.setAttribute('aria-pressed', on ? 'true' : 'false'); });
+    }
+    function openMapOpts() {
+      if (document.getElementById('mapOpts')) return;
+      const shade = document.createElement('div'); shade.id = 'mapOptsShade';
+      const box = document.createElement('div'); box.id = 'mapOpts'; box.setAttribute('role', 'dialog'); box.setAttribute('aria-label', 'Map view');
+      box.innerHTML = MAP_OPTS_HTML;
+      box.querySelector('.moSwitch').appendChild(document.getElementById('trafficBox'));        // the one real Live traffic switch
+      box.querySelector('.moSwitch').appendChild(document.createElement('span'));
+      document.body.append(shade, box);
+      document.getElementById('mapOptsTile').classList.add('on');                              // the button lights up while the card is open
+      const r = document.getElementById('mapOptsTile').getBoundingClientRect();              // pops out beside the button
+      box.style.left = Math.round(r.right + 10) + 'px';
+      box.style.bottom = Math.max(8, Math.round(window.innerHeight - r.bottom)) + 'px';
+      const top = box.getBoundingClientRect().top;
+      if (top < 8) box.style.bottom = (parseFloat(box.style.bottom) + top - 8) + 'px';
+      shade.onclick = closeMapOpts;
+      box.querySelector('.moClose').onclick = closeMapOpts;
+      box.querySelectorAll('[data-mo-map]').forEach(b => { b.onclick = () => { setBaseMap(b.dataset.moMap); syncAppSettings(); syncMapOpts(); }; });
+      syncMapOpts();
+      if (isPhone() && !hist.opts) { histPush('opts'); hist.opts = true; }                    // phone Back closes the card
+    }
+    function closeMapOptsUI() {
+      const box = document.getElementById('mapOpts'); if (!box) return;
+      document.getElementById('trafficHome').appendChild(document.getElementById('trafficBox'));  // the switch goes back to its hidden home
+      document.getElementById('mapOptsTile').classList.remove('on');
+      box.remove(); const shade = document.getElementById('mapOptsShade'); if (shade) shade.remove();
+    }
+    function closeMapOpts() { if (hist.opts) { hist.opts = false; histBack(); } closeMapOptsUI(); }
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && document.getElementById('mapOpts')) closeMapOpts(); });
     try { if (localStorage.getItem('truckroute-basemap') === 'satellite') { map.removeLayer(streetMap); satelliteMap.addTo(map); } } catch (e) { }
     map.attributionControl.setPrefix(false);      // drop the "Leaflet" tag; the data credits stay
     // Remember which map you chose. Only the MAP changes with this: satellite pictures always show in their true (light)
@@ -2041,11 +2126,12 @@
     // ----- The phone's Back button -----
     // A menu that opens full-page adds one entry to the browser's history, so the Back button closes the menu instead of
     // leaving the app. While you are driving, one extra "guard" entry makes Back ask you to use the stop button instead of quitting.
-    const hist = { menu: false, sub: false, guard: false, skip: 0 };
+    const hist = { menu: false, sub: false, guard: false, opts: false, skip: 0 };
     function histPush(tag) { try { history.pushState({ tr: tag }, ''); } catch (e) { } }
     function histBack(steps = 1) { hist.skip++; try { history.go(-steps); } catch (e) { hist.skip--; } }      // our own Back: its popstate is ignored
     window.addEventListener('popstate', () => {
       if (hist.skip > 0) { hist.skip--; return; }
+      if (hist.opts) { hist.opts = false; closeMapOptsUI(); return; }                          // Back closes the Map view card
       if (hist.sub) { hist.sub = false; closeSetSubUI(); return; }                            // Back leaves a Settings page for the Settings list
       if (hist.menu) { hist.menu = false; closePageUI(); return; }                           // Back closes the open menu
       if (hist.guard && nav.active) { histPush('guard'); navNote('Tap the red button to stop navigating'); return; }    // driving: don't quit by accident
@@ -2095,9 +2181,9 @@
       v('sumTruck').textContent = v('heightBox').value + ' ft high · ' + Number(v('weightBox').value || 0).toLocaleString() + ' lbs · ' + v('lengthBox').value + ' ft long' +
         (v('hazmatBox').checked ? ' · hazmat' : '') + (Number(v('maxSpeedBox').value) ? ' · top ' + v('maxSpeedBox').value + ' mph' : '');
       const sel = id => v(id).options[v(id).selectedIndex].text.replace(/ \(.*\)/, '').toLowerCase();
-      v('sumRoute').textContent = 'Tolls: ' + sel('tollsBox') + ' · Ferries: ' + sel('ferryBox') + ' · Live traffic: ' + (v('trafficBox').checked ? 'on' : 'off') +
+      v('sumRoute').textContent = 'Tolls: ' + sel('tollsBox') + ' · Ferries: ' + sel('ferryBox') +
         (v('easyRoadsBox').checked ? ' · no tight turns' : '');
-      v('sumApp').textContent = (document.documentElement.getAttribute('data-theme') === 'dark' ? 'Dark' : 'Light') + ' · ' +
+      v('sumApp').textContent = (document.documentElement.getAttribute('data-theme') === 'dark' ? 'Dark' : 'Light') + ' · ' + (v('trafficBox').checked ? 'traffic on · ' : '') +
         (map.hasLayer(satelliteMap) ? 'satellite' : 'street map') + ' · voice ' + (v('voiceBox').checked ? 'on' : 'off');
     }
     // App settings: light/dark, street/satellite, voice and heading-up, as simple switches.
@@ -2120,7 +2206,7 @@
       try { localStorage.setItem('mapRotate', event.target.checked ? 'heading' : 'north'); } catch (e) { }
       syncRecenterTile();
     });
-    const APP_VERSION = 'v34';
+    const APP_VERSION = 'v35';
     document.getElementById('appVersion').textContent = 'TruckRoute ' + APP_VERSION;
 
     // ----- Saved: places you use often (the other two parts, favorites and trips, draw themselves) -----
