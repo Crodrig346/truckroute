@@ -3,9 +3,9 @@
 // so the app opens instantly and even opens with no signal.
 // It does NOT store routes, stops or map pictures - those always come live from the internet.
 
-const CACHE = 'truckroute-v32';   // change this number whenever the app files change, to force an update
+const CACHE = 'truckroute-v33';   // change this number whenever the app files change, to force an update
 const LEAFLET = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/';
-const APP_FILES = ['./', 'index.html', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png',
+const APP_FILES = ['./', 'index.html', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png', 'icons/badge-96.png',
   // the map library and its little pictures (pins, buttons), saved up front so the app can start with no signal
   LEAFLET + 'leaflet.min.css', LEAFLET + 'leaflet.min.js',
   LEAFLET + 'images/marker-icon.png', LEAFLET + 'images/marker-icon-2x.png', LEAFLET + 'images/marker-shadow.png', LEAFLET + 'images/layers.png',
@@ -49,4 +49,14 @@ self.addEventListener('fetch', event => {
       })));
   }
   // Everything else (routing, stop search, address search, map pictures) goes straight to the internet.
+});
+
+// Tapping the "still navigating" reminder in the notification panel: go back to the open app, or open it if the phone closed it
+// (it then picks the trip back up by itself).
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+  event.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(windows => {
+    for (const w of windows) if ('focus' in w) return w.focus();
+    return self.clients.openWindow((event.notification.data && event.notification.data.url) || './');
+  }));
 });

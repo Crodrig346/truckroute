@@ -734,6 +734,7 @@
     function syncRecenterTile() {
       const tile = document.getElementById('recenterTile');
       if (tile) tile.classList.toggle('on', !!(nav.active && !nav.follow));
+      syncZoomAround();
       updateRotation();
     }
 
@@ -755,26 +756,58 @@
       mapEl.style.transform = 'rotate(' + (-rot.shown) + 'deg)';
       map.invalidateSize({ pan: false });
     }
+    // The street map (MapLibre) inside the turning box: turned back the other way, and drawn facing the same way as you,
+    // so its own town and street names stay upright instead of turning upside down when you head south.
+    function streetMapGL() { try { return typeof streetMap.getMaplibreMap === 'function' ? streetMap.getMaplibreMap() : null; } catch (e) { return null; } }
+    // Turn the street map to face the same way, in step with the box turning (0.6 s). Only the direction is touched,
+    // so the plugin can keep the street map centered on the same spot as the route line while it turns.
+    const glTurn = { from: 0, to: 0, start: 0, ms: 0, frame: 0 };
+    function turnStreetMap(gl, to, ms) {
+      const t = Math.min(1, glTurn.ms ? (performance.now() - glTurn.start) / glTurn.ms : 1);
+      glTurn.from = glTurn.from + (glTurn.to - glTurn.from) * t;            // from wherever it is right now
+      glTurn.to = to; glTurn.start = performance.now(); glTurn.ms = ms;
+      cancelAnimationFrame(glTurn.frame);
+      const step = () => {
+        const g = streetMapGL(); if (!g) return;
+        const k = glTurn.ms ? Math.min(1, (performance.now() - glTurn.start) / glTurn.ms) : 1;
+        const b = glTurn.from + (glTurn.to - glTurn.from) * k;
+        g.jumpTo({ bearing: ((b % 360) + 360) % 360 });
+        if (k < 1) glTurn.frame = requestAnimationFrame(step); else glTurn.from = glTurn.to;
+      };
+      step();
+    }
     function applyRotation(animate) {
       const mapEl = document.getElementById('map');
       mapEl.style.transition = animate ? 'transform .6s linear' : 'none';
       if (rot.on) mapEl.style.transform = 'rotate(' + (-rot.shown) + 'deg)';
+      const gl = streetMapGL();
+      if (gl) {
+        // the holder of the street-map picture (the plugin slides the outer box and the picture itself; this one is free)
+        const holder = gl.getCanvasContainer(), outer = gl.getContainer();
+        holder.style.transformOrigin = (outer.clientWidth / 2) + 'px ' + (outer.clientHeight / 2) + 'px';
+        holder.style.transition = animate ? 'transform .6s linear' : 'none';
+        holder.style.transform = rot.on ? 'rotate(' + rot.shown + 'deg)' : '';
+        turnStreetMap(gl, rot.on ? rot.shown : 0, animate ? 600 : 0);
+      }
       document.documentElement.style.setProperty('--unrot', rot.shown + 'deg');
       const needle = document.getElementById('compassNeedle');
       if (needle) needle.style.transform = 'rotate(' + (-rot.shown) + 'deg)';
     }
     function updateRotation() {
       const mapEl = document.getElementById('map'), ui = document.getElementById('mapUI');
-      const want = nav.active && nav.follow && rotateMode() === 'heading';
+      const want = nav.active && nav.follow && rotateMode() === 'heading' && !map.hasLayer(satelliteMap) && !!streetMapGL();
+      const mid = map.getCenter(), zoom = map.getZoom();                     // keep this spot in the middle of the screen
       if (want && !rot.on) {
         rot.on = true; document.body.classList.add('headingUp');
         ui.appendChild(map.getContainer().querySelector('.leaflet-control-container'));      // buttons out of the turning box
         layoutRotatedMap();
+        map.setView(mid, zoom, { animate: false });
       } else if (!want && rot.on) {
         rot.on = false; document.body.classList.remove('headingUp');
         mapEl.appendChild(ui.querySelector('.leaflet-control-container'));                  // buttons back where they were
         mapEl.style.cssText = ''; rot.shown = 0;
         map.invalidateSize({ pan: false });
+        map.setView(mid, zoom, { animate: false });
       }
       if (want && rot.heading != null) {                                    // turn the shortest way round
         const delta = (((rot.heading - rot.shown) % 360) + 540) % 360 - 180;
@@ -813,11 +846,33 @@
         map.setView([lat, lon], Math.max(map.getZoom(), 14), { animate: true });
       }, () => { say('Could not get your location. Check that location is allowed for this app.'); }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 });
     }
-    // Moving or zooming the map yourself stops it from following the truck.
+    // Sliding the map yourself (to look somewhere else) stops it from following the truck. Zooming does NOT: while
+    // following, pinch / double-tap / mouse-wheel zoom around your position and the map keeps facing your way.
     function stopFollowing() { if (nav.active && nav.follow) { nav.follow = false; syncRecenterTile(); } }
-    map.on('dragstart', stopFollowing);
-    map.getContainer().addEventListener('wheel', stopFollowing, { passive: true });
-    map.getContainer().addEventListener('touchstart', (event) => { if (event.touches.length > 1) stopFollowing(); }, { passive: true });
+    let dragFrom = null;
+    map.on('dragstart', () => { dragFrom = map.getCenter(); });
+    map.on('drag', () => {                                   // a real slide (not the wobble of two fingers landing for a pinch)
+      if (!dragFrom || !nav.active || !nav.follow) return;
+      if (map.latLngToContainerPoint(dragFrom).distanceTo(map.latLngToContainerPoint(map.getCenter())) > 30) { dragFrom = null; stopFollowing(); rebaseSlide(); }
+    });
+    map.on('dragend', () => { if (nav.active && nav.follow && nav.last) map.panTo(nav.last, { animate: true }); dragFrom = null; });   // a tiny slide: back onto the truck
+    // The map just went from turned to north-up in the middle of your slide: carry on the slide from where your finger is
+    // now, measured on the north-up map (otherwise the slide uses the old turned measurements and the map jumps away).
+    function rebaseSlide() {
+      try {
+        const d = map.dragging && map.dragging._draggable; if (!d || !d._moving && !d._moved) return;
+        const sc = d._parentScale || { x: 1, y: 1 };
+        const finger = d._startPoint.add(L.point((d._newPos.x - d._startPos.x) * sc.x, (d._newPos.y - d._startPos.y) * sc.y));
+        d._startPoint = finger;
+        d._startPos = L.DomUtil.getPosition(d._element); d._newPos = d._startPos.clone();
+        d._parentScale = L.DomUtil.getScale(map.getContainer());
+        if (map.dragging._positions) { map.dragging._positions = []; map.dragging._times = []; }   // no fling from the switch
+      } catch (e) { }
+    }
+    function syncZoomAround() {                              // zoom around the middle of the map (your truck) while following
+      const mid = nav.active && nav.follow ? 'center' : true;
+      map.options.touchZoom = map.options.scrollWheelZoom = map.options.doubleClickZoom = mid;
+    }
     // Voice on/off tile. It is added BEFORE the layers button so it sits just below it. Voice is OFF until you turn it on.
     // (The real switch is the "Voice guidance" box in the Truck tab, which the speak() function reads; this tile and that box stay in step.)
     const voiceControl = L.control({ position: 'bottomleft' });
@@ -842,13 +897,13 @@
       button.classList.toggle('on', on);
       button.title = on ? 'Voice guidance is ON (tap to turn off)' : 'Voice guidance is OFF (tap to turn on)';
       button.setAttribute('aria-label', button.title);
-      if (!on) { try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch (e) { } }   // turning voice off stops any talking
+      if (!on) { try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch (e) { } voiceTalking = 0; setAudioFocus(false); }   // turning voice off stops any talking
     }
     {
       const box = document.getElementById('voiceBox');
       let saved = null; try { saved = localStorage.getItem('voiceOn'); } catch (e) { }
       box.checked = saved === '1';                        // off by default
-      box.addEventListener('change', () => { try { localStorage.setItem('voiceOn', box.checked ? '1' : '0'); } catch (e) { } syncVoiceTile(); });
+      box.addEventListener('change', () => { try { localStorage.setItem('voiceOn', box.checked ? '1' : '0'); } catch (e) { } if (box.checked) unlockVoice(); syncVoiceTile(); });
       syncVoiceTile();
     }
     L.control.layers({ 'Street map': streetMap, 'Satellite': satelliteMap }, null, { position: 'bottomleft' }).addTo(map);
@@ -856,6 +911,7 @@
     map.attributionControl.setPrefix(false);      // drop the "Leaflet" tag; the data credits stay
     // Remember which map you chose. Only the MAP changes with this: satellite pictures always show in their true (light)
     // colors, even in dark mode. The rest of the app (cards, dock, menus) stays in the light/dark mode you picked.
+    map.on('baselayerchange', () => { try { glTurn.from = glTurn.to = 0; glTurn.ms = 0; if (nav.active) { updateRotation(); if (rot.on) applyRotation(false); } } catch (x) { } });
     map.on('baselayerchange', (e) => { try { localStorage.setItem('truckroute-basemap', e.name === 'Satellite' ? 'satellite' : 'street'); } catch (x) { } });
 
     // We keep the route line and pins in one "layer group" so we can clear them before drawing a new route.
@@ -1393,6 +1449,26 @@
       }
     }
     function refreshStops() { if (redrawStops) redrawStops(); }
+    let stopsBase = { path: [], along: [] };       // the route the stop list is measured against
+    let lastStopSearchAt = 0, lastRefitSearchAt = 0;
+    // After a recalculation: measure the stops already found against the new route. If the new route goes somewhere the
+    // old search never covered (less than 80% of it near the old one), search that route for stops too (at most every 10 min).
+    function refitStops(newPath, newAlong) {
+      if (!redrawStops) return;
+      const old = stopsBase.path;
+      stopsBase = { path: newPath, along: newAlong };
+      redrawStops();
+      const step = Math.max(1, Math.floor(newPath.length / 200)), oldStep = Math.max(1, Math.floor(old.length / 400));
+      let near = 0, total = 0;
+      for (let i = 0; i < newPath.length; i += step) {
+        total++;
+        for (let j = 0; j < old.length; j += oldStep) if (miles(newPath[i], old[j]) < 2) { near++; break; }
+      }
+      if (total && near / total < 0.8 && Date.now() - lastRefitSearchAt > 600000) {      // at most one extra search every 10 minutes
+        lastRefitSearchAt = Date.now();
+        showStops(newPath).catch(() => { });
+      }
+    }
     // The stop list is grouped by kind, most useful for a truck first. Plain fuel stations (many of them car-only)
     // start folded when there are more than a handful; tap a group's header to open or close it.
     const GROUP_ORDER = ['truck', 'rest', 'parking', 'scale', 'bridge', 'fuel'];
@@ -1462,6 +1538,7 @@
     async function showStops(path) {
       const box = document.getElementById('stopList');
       const myRun = ++stopsRunId;
+      lastStopSearchAt = Date.now();
       let hereDown = false, hereMessage = '';      // set if HERE has a problem during this search
       const hereNoteHtml = () => {
         const row = document.createElement('div'), small = document.createElement('small');
@@ -1473,9 +1550,11 @@
       stopMarkers.clearLayers();
       box.innerHTML = '<div class="stop"><small>Looking for fuel, truck stops and rest areas...</small></div>';
 
-      // Cumulative miles along the route, so we can say "mile 87".
+      // Cumulative miles along the route (where each stop is along it). Kept in "stopsBase" so that after a
+      // recalculation the same stops can be measured against the NEW route (see refitStops).
       const along = [0];
       for (let i = 1; i < path.length; i++) along.push(along[i - 1] + miles(path[i - 1], path[i]));
+      stopsBase = { path, along };
 
       // One giant question for a 700-mile route is too much for a free service. So we cut the route into
       // sections of about 75 miles and ask about each section separately (two at a time, to be polite).
@@ -1551,6 +1630,7 @@
       // draw() turns everything found so far into pins and a list. It runs after each section finishes,
       // so you see stops appear as they arrive instead of waiting for the whole route.
       function draw(isFinal) {
+      const path = stopsBase.path, along = stopsBase.along;        // the route you are on now
       stopMarkers.clearLayers();
       const progress = isFinal ? '' : '<div class="stop"><small>Still searching: ' + finished + ' of ' + sections.length + ' sections done...</small></div>';
       const note = (hereDown ? hereNoteHtml() : '') + (failed ? '<div class="stop"><small>Note: ' + failed + ' of ' + sections.length +
@@ -1582,6 +1662,7 @@
         }
         // A weigh station only matters if you can actually reach it from your road, so skip ones far away.
         const away = awayFromRoute(path, bestIndex, lat, lon);
+        if (away > 1.6) continue;                                  // not near the route you are on (for example after a recalculation)
         if (kind === 'scale' && away > 1.5) continue;
         // A low clearance only matters if it's actually ON your road, so keep it only if it's within ~0.1 mile.
         if (kind === 'bridge' && away > 0.1) continue;
@@ -1616,19 +1697,22 @@
       const shown = document.getElementById('sortBox').value === 'price'
         ? stops.filter(s => s.kind === 'fuel' || s.kind === 'truck').sort((a, b) => (prices[a.key] ? prices[a.key].p : 99) - (prices[b.key] ? prices[b.key].p : 99))
         : stops;
-      // 1) The map: make a pin for every stop, but put only the wanted ones on the map.
+      const youAreAt = nav.active && currentRoute && currentRoute.path === path ? along[Math.min(nav.index, along.length - 1)] : null;
+      const ahead = (x) => youAreAt == null || x.mile >= youAreAt - 0.3;
+      // 1) The map: make a pin for every stop, but put only the wanted ones on the map (while driving, only ones ahead).
       for (const s of stops) {
         const lowForYou = s.kind === 'bridge' && s.clearance < truckHeightM;
         const pin = L.marker([s.lat, s.lon], {
           icon: L.divIcon({ className: '', html: badgeHtml(lowForYou ? 'danger' : s.kind, 'pin'), iconSize: [32, 32], iconAnchor: [16, 16], popupAnchor: [0, -14] })
         }).bindPopup(() => stopPopup(s), { minWidth: 210 });
         markerByKey[s.key] = pin;
-        if (lowForYou || selectedKeys.has(s.key) || visibleKinds.has(s.kind) || (stopQuery && stopMatches(s))) pin.addTo(stopMarkers);
+        if (ahead(s) && (lowForYou || selectedKeys.has(s.key) || visibleKinds.has(s.kind) || (stopQuery && stopMatches(s)))) pin.addTo(stopMarkers);
       }
 
       // 2) The list: everything found, narrowed by your search words if you typed any.
       // With kind buttons switched on (Fuel, Truck stops...), only those kinds are listed.
-      const listed = shown.filter(s => stopMatches(s) && (visibleKinds.size === 0 || visibleKinds.has(s.kind)));
+      const listed = shown.filter(s => ahead(s) && stopMatches(s) && (visibleKinds.size === 0 || visibleKinds.has(s.kind)));
+      if (youAreAt != null) box.insertAdjacentHTML('beforeend', '<div class="stop tip"><small>Driving: showing stops ahead of you on your route.</small></div>');
       if (!listed.length) {
         const none = document.createElement('div');
         none.className = 'stop';
@@ -2028,7 +2112,7 @@
       try { localStorage.setItem('mapRotate', event.target.checked ? 'heading' : 'north'); } catch (e) { }
       syncRecenterTile();
     });
-    const APP_VERSION = 'v32';
+    const APP_VERSION = 'v33';
     document.getElementById('appVersion').textContent = 'TruckRoute ' + APP_VERSION;
 
     // ----- Saved: places you use often (the other two parts, favorites and trips, draw themselves) -----
@@ -2367,9 +2451,47 @@
     }
 
     // Say something out loud with the browser's built-in voice (if the Voice box is ticked).
+    // To be heard over music or an audiobook: a short two-note chime first, the voice at full volume, and (on iPhones with
+    // iOS 17 or newer) the phone is told this is a short announcement, so it turns other sound down while the app talks.
+    // A web app cannot force every phone to lower other apps' sound; the store version will (see README, store checklist).
+    var voiceAudio = null, voiceTalking = 0;            // var: the voice button uses these while the app is still starting
+    function unlockVoice() {                     // phones only allow sound after a tap: called from the Start / voice buttons
+      try {
+        if (!voiceAudio) { const A = window.AudioContext || window.webkitAudioContext; if (A) voiceAudio = new A(); }
+        if (voiceAudio && voiceAudio.state === 'suspended') voiceAudio.resume();
+      } catch (e) { }
+    }
+    function setAudioFocus(talking) {
+      try { if (navigator.audioSession) navigator.audioSession.type = talking ? 'transient' : 'auto'; } catch (e) { }
+    }
+    function chime() {                            // about a third of a second: a high note then a lower one
+      if (!voiceAudio || voiceAudio.state !== 'running') return 0;
+      try {
+        const t0 = voiceAudio.currentTime + 0.02;
+        [[988, 0], [740, 0.16]].forEach(([hz, at]) => {
+          const o = voiceAudio.createOscillator(), g = voiceAudio.createGain();
+          o.type = 'sine'; o.frequency.value = hz;
+          g.gain.setValueAtTime(0.0001, t0 + at);
+          g.gain.exponentialRampToValueAtTime(0.9, t0 + at + 0.02);
+          g.gain.exponentialRampToValueAtTime(0.0001, t0 + at + 0.15);
+          o.connect(g).connect(voiceAudio.destination);
+          o.start(t0 + at); o.stop(t0 + at + 0.17);
+        });
+        return 380;
+      } catch (e) { return 0; }
+    }
     function speak(text) {
       if (!document.getElementById('voiceBox').checked) return;
-      try { if (window.speechSynthesis) window.speechSynthesis.speak(new SpeechSynthesisUtterance(text)); } catch (e) { }
+      if (!window.speechSynthesis) return;
+      try {
+        voiceTalking++; setAudioFocus(true);              // ask the phone to turn other sound down first
+        const done = () => { if (--voiceTalking <= 0) { voiceTalking = 0; setAudioFocus(false); } };
+        const u = new SpeechSynthesisUtterance(text);
+        u.volume = 1; u.rate = 0.95;                      // full volume, a touch slower so it is clear over road noise
+        u.onend = done; u.onerror = done;
+        const wait = chime();
+        setTimeout(() => { try { window.speechSynthesis.speak(u); } catch (e) { done(); } }, wait);
+      } catch (e) { }
     }
 
     function renderDirections() {
@@ -2423,6 +2545,9 @@
       nav.offCount = 0;
       nav.index = index;
       trimTravelledRoute(index, lat, lon);                         // hide the road already driven
+      if (redrawStops && Date.now() - (nav.stopsAt || 0) > 30000 && Math.abs(along[index] - (nav.stopsMile ?? -9)) > 1) {
+        nav.stopsAt = Date.now(); nav.stopsMile = along[index]; redrawStops();      // stops you have passed drop off the list
+      }
       updateEta(); updateSpeedSign();
       const roadDirection = routeBearingAt(index);                 // turn the map so the road ahead points up
       if (roadDirection != null) rot.heading = roadDirection;
@@ -2641,6 +2766,7 @@
       document.getElementById('startBox').value = 'My location';
       routeChoices = [found.choice];
       await chooseRoute(0, { skipStops: true });
+      refitStops(currentRoute.path, currentRoute.along);          // the stops now belong to the new route
     }
     // You've left the route: work out a new one from where you are.
     async function offRoute(lat, lon) {
@@ -2675,6 +2801,8 @@
     }, 30000);
 
     async function startNav() {
+      unlockVoice();
+      askForDrivingNotice();
       if (!currentRoute) { say('Find a route first, then press Start driving.'); return; }
       if (!navigator.geolocation) { say('This device has no GPS access.'); return; }
       nav.active = true; nav.startedAt = Date.now(); nav.index = 0; nav.spoken = {}; nav.follow = true; nav.last = null; nav.offCount = 0; nav.lastTrafficCheck = Date.now();
@@ -2730,10 +2858,38 @@
         () => { /* the restarted watch will report as soon as it can */ },
         { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 });
     }
+    // ----- "Still driving" reminder in the notification panel -----
+    // While you drive and the app is not on screen, a small truck icon sits in the phone's notification panel.
+    // Swipe down and tap it to come straight back to the map. It goes away when you are back in the app or stop driving.
+    function askForDrivingNotice() {                    // asked once, on the Start driving tap (phones only allow asking after a tap)
+      try { if (window.Notification && Notification.permission === 'default') Notification.requestPermission().catch(() => { }); } catch (e) { }
+    }
+    async function showDrivingNotice() {
+      try {
+        if (!nav.active || !window.Notification || Notification.permission !== 'granted' || !navigator.serviceWorker) return;
+        const reg = await navigator.serviceWorker.getRegistration(); if (!reg) return;
+        const to = lastSearch && lastSearch.endText ? ' to ' + lastSearch.endText : '';
+        await reg.showNotification('TruckRoute is still navigating', {
+          body: 'Driving' + to + '. Tap to go back to the map.',
+          tag: 'driving', renotify: false, silent: true, requireInteraction: true,
+          icon: 'icons/icon-192.png', badge: 'icons/badge-96.png', data: { url: './' }
+        });
+      } catch (e) { }
+    }
+    async function hideDrivingNotice() {
+      try {
+        if (!navigator.serviceWorker) return;
+        const reg = await navigator.serviceWorker.getRegistration(); if (!reg) return;
+        (await reg.getNotifications({ tag: 'driving' })).forEach(n => n.close());
+      } catch (e) { }
+    }
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'hidden') { nav.hiddenAt = Date.now(); return; }
+      if (document.visibilityState === 'hidden') { nav.hiddenAt = Date.now(); showDrivingNotice(); return; }
+      hideDrivingNotice();
       resumeNavigation('visible');
     });
+    window.addEventListener('pagehide', () => { if (nav.active) showDrivingNotice(); });
+    hideDrivingNotice();                                  // a reminder left over from last time (the app was opened again)
     window.addEventListener('pageshow', (event) => { if (event.persisted) resumeNavigation('pageshow'); });
     setInterval(() => {                                   // watchdog, while driving and on screen
       if (!nav.active || document.visibilityState !== 'visible') return;
@@ -2767,8 +2923,10 @@
     function stopNav() {
       nav.active = false; nav.follow = true;
       showWholeRoute();
-      renderPlan();                                   // the Route menu's first line goes back to the planned leave / arrive times
+      renderPlan();
+      if (redrawStops) setTimeout(redrawStops, 0);                 // not driving any more: the whole route's stops again                                   // the Route menu's first line goes back to the planned leave / arrive times
       forgetTrip();
+      hideDrivingNotice();
       removeDriveGuard();
       syncRecenterTile();
       if (currentRoute) updateEta();
